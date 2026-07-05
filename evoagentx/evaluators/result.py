@@ -138,6 +138,10 @@ class EvaluationReport:
 
     items: List[ItemResult] = field(default_factory=list)
     elapsed_time: float = 0.0
+    # The metric keys the scorer promises to produce (``Scorer.metric_keys``), captured
+    # by the pipeline. Lets aggregation know the objective vector even when every item
+    # failed — an all-crashed trial then scores 0.0 per key instead of collapsing to {}.
+    metric_keys: Tuple[str, ...] = field(default_factory=tuple)
 
     # ------------------------------------------------------------------ #
     # Persistence (JSONL: one ItemResult per line)
@@ -152,15 +156,21 @@ class EvaluationReport:
         return path
 
     @classmethod
-    def load(cls, path: str) -> "EvaluationReport":
-        """Load a report previously written by ``save`` (or by the pipeline's item log)."""
+    def load(cls, path: str, metric_keys: Tuple[str, ...] = ()) -> "EvaluationReport":
+        """
+        Load a report previously written by ``save`` (or by the pipeline's item log).
+
+        ``metric_keys`` is not stored in the JSONL (see ``save``); re-supply the scorer's
+        keys here if you intend to ``aggregate`` an all-failed report standalone and want
+        it to score 0.0 per key rather than return ``{}``.
+        """
         items: List[ItemResult] = []
         with open(path, "r") as f:
             for line in f:
                 line = line.strip()
                 if line:
                     items.append(ItemResult.from_json_dict(json.loads(line)))
-        return cls(items=items)
+        return cls(items=items, metric_keys=tuple(metric_keys))
 
     # ------------------------------------------------------------------ #
     # Views
@@ -194,7 +204,12 @@ class EvaluationReport:
     # ------------------------------------------------------------------ #
     # Aggregation
     # ------------------------------------------------------------------ #
-    def aggregate(self, reduce: ReduceFn = "mean", on_error: OnError = "zero") -> Dict[str, float]:
+    def aggregate(
+        self,
+        reduce: ReduceFn = "mean",
+        on_error: OnError = "zero",
+        metric_keys: Optional[List[str]] = None,
+    ) -> Dict[str, float]:
         """Reduce per-item metrics into a single objective-facing dict.
 
         ``on_error`` decides how failed items count toward the score:
@@ -208,17 +223,27 @@ class EvaluationReport:
 
         ``reduce`` is ``"mean"`` or a callable ``List[float] -> float`` applied per key
         over the chosen denominator (failed items appear as 0.0 in that list).
+
+        The metric key set is the union of keys seen on successful items and the *declared*
+        keys (``metric_keys`` arg, else ``self.metric_keys`` from the scorer). Declaring
+        keys keeps the objective vector stable across trials and, crucially, makes the
+        all-failed case honor ``on_error='zero'``: with keys known, every declared metric
+        is reported as 0.0 instead of returning an empty dict.
         """
         if on_error == "raise" and self.failures:
             raise RuntimeError(
                 f"{self.total_errors}/{self.total_items} items failed and on_error='raise'."
             )
+        declared = set(metric_keys if metric_keys is not None else self.metric_keys)
         successes = self.successes
         if not successes:
+            if on_error == "zero" and declared:
+                # All items failed but we know the contract: penalize with 0.0 per key.
+                return {k: 0.0 for k in declared}
             logger.warning("No successful metrics to aggregate. Returning an empty dict.")
             return {}
 
-        keys = {k for it in successes for k in (it.metrics or {})}
+        keys = {k for it in successes for k in (it.metrics or {})} | declared
         if on_error == "ignore":
             denom_items = successes
         elif on_error == "zero":
@@ -245,6 +270,7 @@ class EvaluationReport:
         self,
         reduce: ReduceFn = "mean",
         on_error: OnError = "zero",
+        metric_keys: Optional[List[str]] = None,
         include_traces: Union[bool, Callable[[ItemResult], Any]] = False,
         include_artifacts: Union[bool, Callable[["EvaluationReport"], Dict[str, Any]]] = False,
         extra_metadata: Optional[Union[Dict[str, Any], Callable[["EvaluationReport"], Dict[str, Any]]]] = None,
@@ -255,6 +281,9 @@ class EvaluationReport:
         The default packs only aggregated ``metrics`` plus run statistics in ``metadata``
         (all pure-JSON, safe to checkpoint). Opt in to richer payloads:
 
+            - ``metric_keys``              -> override the metric key set used by aggregation
+              (defaults to the scorer-declared ``report.metric_keys``). Mainly the escape
+              hatch for an all-failed trial to still emit 0.0 per key; see ``aggregate``.
             - ``include_traces=True``      -> ``traces = [item.trace for item in items]``.
               Pass a callable ``ItemResult -> Any`` to map each item to a trace entry.
             - ``include_artifacts=True``   -> ``artifacts = {id: item.artifacts}``.
@@ -271,7 +300,7 @@ class EvaluationReport:
         if builder is not None:
             return builder(self)
 
-        metrics = self.aggregate(reduce=reduce, on_error=on_error)
+        metrics = self.aggregate(reduce=reduce, on_error=on_error, metric_keys=metric_keys)
 
         traces: List[Any] = []
         if include_traces:

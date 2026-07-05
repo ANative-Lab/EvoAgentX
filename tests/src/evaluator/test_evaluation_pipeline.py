@@ -157,6 +157,79 @@ def test_on_error_policies_count_failures():
     assert report.to_result().metadata["error_ids"] == [1]
 
 
+def test_all_failed_trial_scores_zero_via_declared_metric_keys():
+    """When every item crashes, a scorer-declared key set makes on_error='zero' report
+    0.0 per key instead of collapsing to an empty dict (which would leave the optimizer's
+    objective undefined)."""
+    from evoagentx.benchmark.scorers.base import Scorer
+
+    class AccScorer(Scorer):
+        def score(self, prediction, label):
+            return {"acc": 1.0 if prediction == label else 0.0}
+
+        @property
+        def metric_keys(self):
+            return ("acc",)
+
+    bench = FakeBenchmark(n=4)
+
+    def always_boom(example):
+        raise RuntimeError("boom")
+
+    report = EvaluationPipeline(verbose=False).run(
+        always_boom, DataLoader(bench, split="test"), AccScorer())
+    assert report.total_items == 4
+    assert report.total_errors == 4
+    assert report.metric_keys == ("acc",)  # captured from the scorer
+
+    # zero: all-failed trial is the worst score, not an empty/undefined objective
+    assert report.aggregate(on_error="zero") == {"acc": 0.0}
+    assert report.to_result().metrics == {"acc": 0.0}
+    # ignore: no successes to average -> genuinely no data
+    assert report.aggregate(on_error="ignore") == {}
+
+
+def test_all_failed_trial_without_declared_keys_returns_empty():
+    """Back-compat: a bare-callable scorer declares no keys, so an all-failed trial can't
+    know which keys to zero-fill and still returns {}."""
+    bench = FakeBenchmark(n=3)
+
+    def always_boom(example):
+        raise RuntimeError("boom")
+
+    report = EvaluationPipeline(verbose=False).run(
+        always_boom, DataLoader(bench, split="test"), _scorer)
+    assert report.metric_keys == ()
+    assert report.aggregate(on_error="zero") == {}
+    # ...unless the caller supplies keys explicitly (the escape hatch)
+    assert report.aggregate(on_error="zero", metric_keys=["acc"]) == {"acc": 0.0}
+    assert report.to_result(metric_keys=["acc"]).metrics == {"acc": 0.0}
+
+
+def test_metric_keys_not_persisted_but_restorable_on_load():
+    """metric_keys is a scorer contract, not per-item data, so save/load doesn't carry it.
+    A standalone all-failed report re-aggregates to {} unless keys are re-supplied."""
+    report = EvaluationReport(
+        items=[ItemResult(id=i, error="boom") for i in range(3)],
+        metric_keys=("acc",),
+    )
+    assert report.aggregate(on_error="zero") == {"acc": 0.0}
+
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "report.jsonl")
+        report.save(path)
+
+        # metric_keys is gone after a bare load -> back to {}
+        loaded = EvaluationReport.load(path)
+        assert loaded.metric_keys == ()
+        assert loaded.aggregate(on_error="zero") == {}
+
+        # ...but re-supplying the scorer's keys restores the zero-fill
+        restored = EvaluationReport.load(path, metric_keys=("acc",))
+        assert restored.metric_keys == ("acc",)
+        assert restored.aggregate(on_error="zero") == {"acc": 0.0}
+
+
 def test_input_fn_and_output_fn():
     bench = FakeBenchmark(n=3)
     # program now takes a raw int and returns a dict; hooks adapt both ends.

@@ -9,7 +9,7 @@ legacy ``CodingBenchmark`` and should be migrated into the methods marked ``TODO
 along with the ``SUCCESS / FAILED / TIMEOUT`` constants.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -22,6 +22,9 @@ from .base import Scorer, Metrics
 class CodeScorer(Scorer):
     """pass@k scorer for HumanEval / MBPP-style tasks.
 
+    Unlike the fixed-metric QA/Math scorers, the emitted keys are parametric: one
+    ``pass@{k}`` per configured ``k`` (see :attr:`metric_keys`).
+
     Args:
         k: a single k or a list of k values for pass@k.
         timeout: per-test execution timeout (seconds).
@@ -31,10 +34,15 @@ class CodeScorer(Scorer):
 
     SUCCESS, FAILED, TIMEOUT = 0, 1, 2
 
-    def __init__(self, k=1, timeout: int = 60, prompt_joiner: str = ""):
+    def __init__(self, k: Union[int, List[int]] = 1, timeout: int = 60, prompt_joiner: str = ""):
         self.k = k
         self.timeout = timeout
         self.prompt_joiner = prompt_joiner
+
+    @property
+    def metric_keys(self) -> Tuple[str, ...]:
+        k_list = self.k if isinstance(self.k, (list, tuple)) else [self.k]
+        return tuple(f"pass@{k}" for k in k_list)
 
     # --- TODO: migrate from CodingBenchmark ------------------------------- #
     def _check_inputs(self, prediction: Any, label: Any) -> Tuple[List[str], List[dict]]:

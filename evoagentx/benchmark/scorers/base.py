@@ -14,7 +14,7 @@ Design:
 import asyncio
 import inspect
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Union
+from typing import Any, Callable, Dict, List, Tuple, Union
 
 
 Metrics = Dict[str, float]
@@ -32,6 +32,21 @@ class Scorer(ABC):
         """Async variant. Defaults to offloading the sync ``score`` to a thread."""
         return await asyncio.to_thread(self.score, prediction, label)
 
+    @property
+    def metric_keys(self) -> Tuple[str, ...]:
+        """The metric keys this scorer produces, independent of any data.
+
+        Declaring them makes the metric set a *contract of the scorer* rather than
+        something inferred from successful items. It lets the pipeline/report know the
+        objective vector even when **every** item fails (see
+        ``EvaluationReport.aggregate`` / ``to_result``): an all-crashed trial then scores
+        0.0 on each declared key instead of collapsing to an empty ``{}``.
+
+        Return ``()`` (the default) if the keys are not knowable ahead of time; callers
+        fall back to inferring them from successful items.
+        """
+        return ()
+
 
 class _CallableScorer(Scorer):
     """Adapter that wraps a plain callable into a ``Scorer``.
@@ -39,9 +54,16 @@ class _CallableScorer(Scorer):
     Supports both sync ``fn(prediction, label) -> dict`` and async coroutine functions.
     """
 
-    def __init__(self, fn: Callable[[Any, Any], Any]):
+    def __init__(self, fn: Callable[[Any, Any], Any], metric_keys: Tuple[str, ...] = ()):
         self._fn = fn
         self._is_async = inspect.iscoroutinefunction(fn)
+        self._metric_keys = tuple(metric_keys)
+
+    @property
+    def metric_keys(self) -> Tuple[str, ...]:
+        # A plain callable can't be introspected for its keys; empty unless declared
+        # explicitly via ``as_scorer(fn, metric_keys=...)``.
+        return self._metric_keys
 
     def score(self, prediction: Any, label: Any) -> Metrics:
         if self._is_async:
@@ -66,6 +88,20 @@ class CompositeScorer(Scorer):
         self.scorers = [as_scorer(s) for s in scorers]
         self.prefixes = prefixes
 
+    @property
+    def metric_keys(self) -> Tuple[str, ...]:
+        # Merge child keys with the same prefixing scheme as ``_merge``. If any child
+        # declares no keys, the whole set is unknown (``()``) — we can't partially
+        # promise a contract we can't fully back.
+        keys: List[str] = []
+        for i, scorer in enumerate(self.scorers):
+            child = scorer.metric_keys
+            if not child:
+                return ()
+            prefix = self.prefixes[i] + "/" if self.prefixes else ""
+            keys.extend(f"{prefix}{k}" for k in child)
+        return tuple(keys)
+
     def _merge(self, results: List[Metrics]) -> Metrics:
         merged: Metrics = {}
         for i, metrics in enumerate(results):
@@ -82,10 +118,15 @@ class CompositeScorer(Scorer):
         return self._merge(list(results))
 
 
-def as_scorer(obj: Union[Scorer, Callable]) -> Scorer:
-    """Normalize a ``Scorer`` or a plain callable into a ``Scorer`` instance."""
+def as_scorer(obj: Union[Scorer, Callable], metric_keys: Tuple[str, ...] = ()) -> Scorer:
+    """Normalize a ``Scorer`` or a plain callable into a ``Scorer`` instance.
+
+    ``metric_keys`` only applies when wrapping a plain callable, letting the caller
+    declare the callable's metric keys (see ``Scorer.metric_keys``); it is ignored when
+    ``obj`` is already a ``Scorer`` (that scorer owns its own contract).
+    """
     if isinstance(obj, Scorer):
         return obj
     if callable(obj):
-        return _CallableScorer(obj)
+        return _CallableScorer(obj, metric_keys=metric_keys)
     raise TypeError(f"Expected a Scorer or a callable, got {type(obj)!r}.")

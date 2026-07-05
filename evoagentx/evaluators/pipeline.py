@@ -135,7 +135,9 @@ class EvaluationPipeline:
         scorer = as_scorer(scorer)
         log_path = os.path.join(output_dir, "report.jsonl") if output_dir else None
         log = _ItemLog(log_path, flush_every)
-        report = EvaluationReport()
+        # Carry the scorer's declared metric keys onto the report so aggregation knows the
+        # objective vector even if every item fails (see EvaluationReport.aggregate).
+        report = EvaluationReport(metric_keys=tuple(scorer.metric_keys))
         if resume:
             prior = log.load()
             report.items.extend(prior)

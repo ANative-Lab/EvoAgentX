@@ -7,7 +7,7 @@ lives on the legacy GSM8K / MATH benchmarks and should be migrated into the meth
 marked ``TODO`` below.
 """
 
-from typing import Any
+from typing import Any, Tuple
 
 from .base import Scorer, Metrics
 
@@ -15,18 +15,25 @@ from .base import Scorer, Metrics
 class MathScorer(Scorer):
     """Score a math answer against the ground truth.
 
+    Emits a single fixed metric, :attr:`METRIC_KEYS` (``solve_rate``) — the convention the
+    GSM8K / MATH benchmarks already use.
+
     Args:
         mode: "numeric" (GSM8K-style: extract last number, compare within ``tol``) or
             "symbolic" (MATH-style: extract answer, compare with sympy equality).
         tol: absolute tolerance for numeric comparison.
-        metric_name: key used in the returned metrics dict.
     """
 
-    def __init__(self, mode: str = "numeric", tol: float = 1e-6, metric_name: str = "solve_rate"):
+    METRIC_KEYS: Tuple[str, ...] = ("solve_rate",)
+
+    def __init__(self, mode: str = "numeric", tol: float = 1e-6):
         assert mode in ("numeric", "symbolic"), f"Invalid mode: {mode}"
         self.mode = mode
         self.tol = tol
-        self.metric_name = metric_name
+
+    @property
+    def metric_keys(self) -> Tuple[str, ...]:
+        return self.METRIC_KEYS
 
     # --- TODO: migrate from GSM8K.extract_last_number --------------------- #
     def _extract_numeric(self, text: Any):
@@ -48,4 +55,4 @@ class MathScorer(Scorer):
             pred = self._extract_symbolic(prediction)
             gold = self._extract_symbolic(label)
             solved = self._symbolic_equal(pred, gold)
-        return {self.metric_name: 1.0 if solved else 0.0}
+        return {self.METRIC_KEYS[0]: 1.0 if solved else 0.0}
