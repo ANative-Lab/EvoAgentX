@@ -1,5 +1,6 @@
 import abc
 import asyncio
+import inspect
 import os
 import time
 from typing import Any, Awaitable, Callable, ClassVar, FrozenSet, Optional, List, Dict, Literal, Set, Tuple, Iterable, Union
@@ -18,7 +19,7 @@ from .base import (
     TrialRecord,
     ValidationResult,
 )
-from .adapter import ProgramAdapter, ApplyResult, TrialWorkspace
+from .adapter import ProgramAdapter, ApplyResult, TrialContext, TrialWorkspace
 from .objective import Objective
 from .utils import OptimizationProgress, format_optimization_report, format_trial_progress_message
 
@@ -91,23 +92,83 @@ def _validation_failure_message(results: List[ValidationResult]) -> Optional[str
     )
 
 
-def _prepare_trial_workspace(
+_CONTEXT_PARAM_NAMES = frozenset({"ctx", "context", "trial_context"})
+
+
+def _accepts_trial_context(evaluate_fn: Callable) -> bool:
+    """Return True when `evaluate_fn` should be called as (adapter, context).
+
+    Deliberately opt-in rather than "any second positional parameter": an evaluator like
+    ``def evaluate(adapter, split="dev")`` must NOT silently receive a TrialContext as
+    ``split``. The context is passed only when the second positional parameter is named
+    ``ctx`` / ``context`` / ``trial_context`` or is annotated as ``TrialContext``, or when
+    the callable takes ``*args`` after a single positional parameter.
+    """
+    try:
+        sig = inspect.signature(evaluate_fn)
+    except (TypeError, ValueError):
+        return False
+    params = list(sig.parameters.values())
+    positional = [p for p in params if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)]
+    if len(positional) >= 2:
+        second = positional[1]
+        if second.name in _CONTEXT_PARAM_NAMES:
+            return True
+        annotation = second.annotation
+        if annotation is TrialContext:
+            return True
+        # String annotations (e.g. under `from __future__ import annotations`).
+        if isinstance(annotation, str) and annotation.split(".")[-1].strip() == "TrialContext":
+            return True
+        return False
+    return any(p.kind == p.VAR_POSITIONAL for p in params)
+
+
+def _call_evaluate_fn(evaluate_fn: Callable, adapter: ProgramAdapter, context: TrialContext) -> Any:
+    """Invoke `evaluate_fn` with or without the TrialContext, based on its signature.
+
+    Works for both sync and async evaluators: the async caller simply awaits the
+    returned coroutine.
+    """
+    if _accepts_trial_context(evaluate_fn):
+        return evaluate_fn(adapter, context)
+    return evaluate_fn(adapter)
+
+
+def _prepare_trial_dirs(
     adapter: ProgramAdapter,
     snapshot: SnapShot,
     trial_id: int,
+    trials_root: Optional[str],
     workspace_root: Optional[str],
     keep_trial_workspaces: bool,
     metadata: Optional[Dict[str, Any]] = None,
     **kwargs,
-) -> Optional[TrialWorkspace]:
-    """Bind and prepare a per-trial workspace when workspace isolation is enabled."""
-    if workspace_root is None:
+) -> Tuple[Optional[str], Optional[TrialWorkspace]]:
+    """Create the persistent trial directory and (when enabled) the adapter workspace.
+
+    Two distinct locations with different lifecycles:
+      - trial_dir (``<trials_root>/trial_XXXX_<snapshot_id>``): the trial's archive
+        directory, created whenever the run persists state (`save_dir`/`resume_from`).
+        Handed to `evaluate_fn` via TrialContext so evaluation results land in a
+        per-trial location; never cleaned up by the engine.
+      - workspace: the adapter's file sandbox, created only when the adapter declares
+        `uses_workspace` (placed inside trial_dir) or an explicit `workspace_root`
+        forces it. Subject to `keep_trial_workspaces` cleanup.
+    """
+    trial_dir: Optional[str] = None
+    if trials_root is not None:
+        trial_dir = os.path.join(trials_root, f"trial_{trial_id:04d}_{snapshot.snapshot_id}")
+        os.makedirs(trial_dir, exist_ok=True)
+
+    if workspace_root is not None:
+        workspace_dir = os.path.join(workspace_root, f"trial_{trial_id:04d}_{snapshot.snapshot_id}")
+    elif adapter.uses_workspace and trial_dir is not None:
+        workspace_dir = os.path.join(trial_dir, "workspace")
+    else:
         adapter.bind_workspace(None)
-        return None
-    workspace_dir = os.path.join(
-        workspace_root,
-        f"trial_{trial_id:04d}_{snapshot.snapshot_id}",
-    )
+        return trial_dir, None
+
     workspace = TrialWorkspace.create(
         root_dir=workspace_dir,
         trial_id=trial_id,
@@ -117,7 +178,7 @@ def _prepare_trial_workspace(
     )
     adapter.bind_workspace(workspace)
     adapter.prepare_workspace(workspace, snapshot, **kwargs)
-    return workspace
+    return trial_dir, workspace
 
 
 def _run_trial(
@@ -125,7 +186,8 @@ def _run_trial(
     base_snapshot: SnapShot,
     proposal: OptimizationProposal,
     trial_id: int,
-    evaluate_fn: Callable[[ProgramAdapter], EvaluationReturn],
+    evaluate_fn: Callable[..., EvaluationReturn],
+    trials_root: Optional[str] = None,
     workspace_root: Optional[str] = None,
     keep_trial_workspaces: bool = True,
     isolate_snapshots: bool = True,
@@ -155,13 +217,15 @@ def _run_trial(
             status="failed",
             error=result.error,
         )
+    trial_dir: Optional[str] = None
     workspace: Optional[TrialWorkspace] = None
     validation_results: List[ValidationResult] = []
     try:
-        workspace = _prepare_trial_workspace(
+        trial_dir, workspace = _prepare_trial_dirs(
             result.adapter,
             result.snapshot,
             trial_id,
+            trials_root,
             workspace_root,
             keep_trial_workspaces,
             metadata=proposal.metadata,
@@ -184,10 +248,19 @@ def _run_trial(
                 source_snapshot_id=proposal.source_snapshot_id,
                 status="failed",
                 validation_results=validation_results,
+                trial_dir=trial_dir,
                 workspace_dir=workspace.root_dir if workspace is not None else None,
                 error=validation_error,
             )
-        evaluation = _normalize_evaluation_result(evaluate_fn(result.adapter), trial_id)
+        context = TrialContext(
+            trial_id=trial_id,
+            trial_dir=trial_dir,
+            workspace=workspace,
+            metadata=proposal.metadata or {},
+        )
+        evaluation = _normalize_evaluation_result(
+            _call_evaluate_fn(evaluate_fn, result.adapter, context), trial_id
+        )
         captured_snapshot = result.adapter.capture_after_eval(
             snapshot=result.snapshot,
             evaluation=evaluation,
@@ -204,6 +277,7 @@ def _run_trial(
             source_snapshot_id=proposal.source_snapshot_id,
             status="failed",
             validation_results=validation_results,
+            trial_dir=trial_dir,
             workspace_dir=workspace.root_dir if workspace is not None else None,
             error=str(exc),
         )
@@ -222,6 +296,7 @@ def _run_trial(
         artifacts=evaluation.artifacts,
         metadata=evaluation.metadata,
         validation_results=validation_results,
+        trial_dir=trial_dir,
         workspace_dir=workspace.root_dir if workspace is not None else None,
     )
 
@@ -231,8 +306,9 @@ async def _async_run_trial(
     base_snapshot: SnapShot,
     proposal: OptimizationProposal,
     trial_id: int,
-    evaluate_fn: Callable[[ProgramAdapter], Awaitable[EvaluationReturn]],
+    evaluate_fn: Callable[..., Awaitable[EvaluationReturn]],
     sem: Optional[asyncio.Semaphore] = None,
+    trials_root: Optional[str] = None,
     workspace_root: Optional[str] = None,
     keep_trial_workspaces: bool = True,
     isolate_snapshots: bool = True,
@@ -263,13 +339,15 @@ async def _async_run_trial(
             status="failed",
             error=result.error,
         )
+    trial_dir: Optional[str] = None
     workspace: Optional[TrialWorkspace] = None
     validation_results: List[ValidationResult] = []
     try:
-        workspace = _prepare_trial_workspace(
+        trial_dir, workspace = _prepare_trial_dirs(
             result.adapter,
             result.snapshot,
             trial_id,
+            trials_root,
             workspace_root,
             keep_trial_workspaces,
             metadata=proposal.metadata,
@@ -292,14 +370,25 @@ async def _async_run_trial(
                 source_snapshot_id=proposal.source_snapshot_id,
                 status="failed",
                 validation_results=validation_results,
+                trial_dir=trial_dir,
                 workspace_dir=workspace.root_dir if workspace is not None else None,
                 error=validation_error,
             )
+        context = TrialContext(
+            trial_id=trial_id,
+            trial_dir=trial_dir,
+            workspace=workspace,
+            metadata=proposal.metadata or {},
+        )
         if sem is not None:
             async with sem:
-                evaluation = _normalize_evaluation_result(await evaluate_fn(result.adapter), trial_id)
+                evaluation = _normalize_evaluation_result(
+                    await _call_evaluate_fn(evaluate_fn, result.adapter, context), trial_id
+                )
         else:
-            evaluation = _normalize_evaluation_result(await evaluate_fn(result.adapter), trial_id)
+            evaluation = _normalize_evaluation_result(
+                await _call_evaluate_fn(evaluate_fn, result.adapter, context), trial_id
+            )
         captured_snapshot = await result.adapter.async_capture_after_eval(
             snapshot=result.snapshot,
             evaluation=evaluation,
@@ -316,6 +405,7 @@ async def _async_run_trial(
             source_snapshot_id=proposal.source_snapshot_id,
             status="failed",
             validation_results=validation_results,
+            trial_dir=trial_dir,
             workspace_dir=workspace.root_dir if workspace is not None else None,
             error=str(exc),
         )
@@ -334,6 +424,7 @@ async def _async_run_trial(
         artifacts=evaluation.artifacts,
         metadata=evaluation.metadata,
         validation_results=validation_results,
+        trial_dir=trial_dir,
         workspace_dir=workspace.root_dir if workspace is not None else None,
     )
 
@@ -361,8 +452,9 @@ class TrialRuntime:
         self,
         state: OptimizationRunState,
         proposal: OptimizationProposal,
-        evaluate_fn: Callable[[ProgramAdapter], EvaluationReturn],
+        evaluate_fn: Callable[..., EvaluationReturn],
         objective: Objective,
+        trials_root: Optional[str] = None,
         workspace_root: Optional[str] = None,
         keep_trial_workspaces: bool = True,
         isolate_snapshots: bool = True,
@@ -394,6 +486,7 @@ class TrialRuntime:
             proposal,
             trial_id,
             evaluate_fn,
+            trials_root=trials_root,
             workspace_root=workspace_root,
             keep_trial_workspaces=keep_trial_workspaces,
             isolate_snapshots=isolate_snapshots,
@@ -405,8 +498,9 @@ class TrialRuntime:
         self,
         state: OptimizationRunState,
         proposal: OptimizationProposal,
-        evaluate_fn: Callable[[ProgramAdapter], Awaitable[EvaluationReturn]],
+        evaluate_fn: Callable[..., Awaitable[EvaluationReturn]],
         objective: Objective,
+        trials_root: Optional[str] = None,
         workspace_root: Optional[str] = None,
         keep_trial_workspaces: bool = True,
         isolate_snapshots: bool = True,
@@ -433,6 +527,7 @@ class TrialRuntime:
             proposal,
             trial_id,
             evaluate_fn,
+            trials_root=trials_root,
             workspace_root=workspace_root,
             keep_trial_workspaces=keep_trial_workspaces,
             isolate_snapshots=isolate_snapshots,
@@ -444,10 +539,11 @@ class TrialRuntime:
         self,
         state: OptimizationRunState,
         proposals: List[OptimizationProposal],
-        evaluate_fn: Callable[[ProgramAdapter], EvaluationReturn],
+        evaluate_fn: Callable[..., EvaluationReturn],
         objective: Objective,
         execution_mode: Literal["sequential", "concurrent"] = "sequential",
         max_workers: Optional[int] = None,
+        trials_root: Optional[str] = None,
         workspace_root: Optional[str] = None,
         keep_trial_workspaces: bool = True,
         isolate_snapshots: bool = True,
@@ -484,6 +580,7 @@ class TrialRuntime:
                 proposal,
                 evaluate_fn,
                 objective,
+                trials_root=trials_root,
                 workspace_root=workspace_root,
                 keep_trial_workspaces=keep_trial_workspaces,
                 isolate_snapshots=isolate_snapshots,
@@ -495,10 +592,11 @@ class TrialRuntime:
         self,
         state: OptimizationRunState,
         proposals: List[OptimizationProposal],
-        evaluate_fn: Callable[[ProgramAdapter], Awaitable[EvaluationReturn]],
+        evaluate_fn: Callable[..., Awaitable[EvaluationReturn]],
         objective: Objective,
         execution_mode: Literal["sequential", "concurrent"] = "sequential",
         max_workers: Optional[int] = None,
+        trials_root: Optional[str] = None,
         workspace_root: Optional[str] = None,
         keep_trial_workspaces: bool = True,
         isolate_snapshots: bool = True,
@@ -535,6 +633,7 @@ class TrialRuntime:
                     proposal,
                     evaluate_fn,
                     objective,
+                    trials_root=trials_root,
                     workspace_root=workspace_root,
                     keep_trial_workspaces=keep_trial_workspaces,
                     isolate_snapshots=isolate_snapshots,
@@ -557,6 +656,7 @@ class TrialRuntime:
                 base_trial_id + idx,
                 evaluate_fn,
                 sem,
+                trials_root=trials_root,
                 workspace_root=workspace_root,
                 keep_trial_workspaces=keep_trial_workspaces,
                 isolate_snapshots=isolate_snapshots,
@@ -795,29 +895,26 @@ class Optimizer(abc.ABC):
 
         return "concurrent", max_workers
 
-    def _resolve_workspace_root(
-        self,
+    @staticmethod
+    def _resolve_trials_root(
         state: OptimizationRunState,
         save_dir: Optional[str],
         resume_from: Optional[str],
-        workspace_root: Optional[str],
     ) -> Optional[str]:
         """
-        Resolve the trial workspace root.
+        Resolve the root under which per-trial archive directories are created.
 
-        An explicit `workspace_root` always forces workspace creation. Otherwise
-        workspaces are only enabled when the adapter declares `uses_workspace` AND a
-        persistent save/resume directory is in use — file/code/skills adapters that
-        materialize per-trial files. In-memory adapters (prompts, model names, config)
-        set `uses_workspace=False` (the default), so the engine never spawns empty
-        per-trial directories for them, even when `save_dir` is set for checkpointing.
+        Whenever the run persists state (`save_dir` or `resume_from` given), every trial
+        (and the baseline) gets a durable directory `<save_dir>/trials/trial_XXXX_<snap>`,
+        handed to `evaluate_fn` through `TrialContext.trial_dir` so evaluation results
+        from different trials never collide. Runs without persistence get no trial dirs.
+
+        The adapter workspace (file sandbox) is separate: it is created inside the trial
+        dir only for adapters that declare `uses_workspace`, or wherever an explicit
+        `workspace_root` argument forces it (see `_prepare_trial_dirs`).
         """
-        if workspace_root is not None:
-            return workspace_root
-        if not self.adapter.uses_workspace:
-            return None
         if save_dir is not None or resume_from is not None:
-            return os.path.join(state.save_dir or "./", "workspaces")
+            return os.path.join(state.save_dir or "./", "trials")
         return None
 
     def on_run_start(
@@ -1149,7 +1246,7 @@ class Optimizer(abc.ABC):
     @silence_cost_logs
     def optimize(
         self,
-        evaluate_fn: Callable[[ProgramAdapter], EvaluationReturn],
+        evaluate_fn: Callable[..., EvaluationReturn],
         objective: Objective,
         max_trials: int = 3,
         save_dir: Optional[str] = None,
@@ -1176,7 +1273,7 @@ class Optimizer(abc.ABC):
         state = self._init_run_state(save_dir, resume_from)
         start_step = state.current_step
         self.load_optimizer_state(state)
-        trial_workspace_root = self._resolve_workspace_root(state, save_dir, resume_from, workspace_root)
+        trials_root = self._resolve_trials_root(state, save_dir, resume_from)
         progress = OptimizationProgress(total=max_trials, initial=state.current_step)
 
         # Evaluate baseline once if not yet done; persists so resume skips this.
@@ -1184,17 +1281,19 @@ class Optimizer(abc.ABC):
         if baseline_record is not None and baseline_record.metrics is None:
             baseline_snapshot = state.get_snapshot_by_id(baseline_record.snapshot_id)
             baseline_adapter = self.adapter.load_snapshot(baseline_snapshot) if baseline_snapshot is not None else self.adapter
+            baseline_trial_dir: Optional[str] = None
             baseline_workspace: Optional[TrialWorkspace] = None
             baseline_validation_results: List[ValidationResult] = []
             try:
                 if baseline_snapshot is None:
                     raise RuntimeError("Baseline snapshot is missing from optimization state.")
                 baseline_adapter._validate_snapshot(baseline_snapshot, context="baseline snapshot")
-                baseline_workspace = _prepare_trial_workspace(
+                baseline_trial_dir, baseline_workspace = _prepare_trial_dirs(
                     baseline_adapter,
                     baseline_snapshot,
                     BASELINE_TRIAL_ID,
-                    trial_workspace_root,
+                    trials_root,
+                    workspace_root,
                     keep_trial_workspaces,
                     metadata={"baseline": True},
                     **kwargs,
@@ -1211,7 +1310,15 @@ class Optimizer(abc.ABC):
                 validation_error = _validation_failure_message(baseline_validation_results)
                 if validation_error is not None:
                     raise RuntimeError(validation_error)
-                evaluation: EvaluationResult = _normalize_evaluation_result(evaluate_fn(baseline_adapter), BASELINE_TRIAL_ID)
+                baseline_context = TrialContext(
+                    trial_id=BASELINE_TRIAL_ID,
+                    trial_dir=baseline_trial_dir,
+                    workspace=baseline_workspace,
+                    metadata={"baseline": True},
+                )
+                evaluation: EvaluationResult = _normalize_evaluation_result(
+                    _call_evaluate_fn(evaluate_fn, baseline_adapter, baseline_context), BASELINE_TRIAL_ID
+                )
                 captured_baseline = baseline_adapter.capture_after_eval(
                     snapshot=baseline_snapshot,
                     evaluation=evaluation,
@@ -1229,12 +1336,14 @@ class Optimizer(abc.ABC):
                 baseline_record.artifacts = evaluation.artifacts
                 baseline_record.metadata = evaluation.metadata
                 baseline_record.validation_results = baseline_validation_results
+                baseline_record.trial_dir = baseline_trial_dir
                 baseline_record.workspace_dir = baseline_workspace.root_dir if baseline_workspace is not None else None
                 baseline_record.error = None
                 self._checkpoint(state)
             except Exception as exc:
                 baseline_record.status = "failed"
                 baseline_record.validation_results = baseline_validation_results
+                baseline_record.trial_dir = baseline_trial_dir
                 baseline_record.workspace_dir = baseline_workspace.root_dir if baseline_workspace is not None else None
                 baseline_record.error = str(exc)
                 self._checkpoint(state)
@@ -1268,7 +1377,8 @@ class Optimizer(abc.ABC):
                 objective=objective,
                 execution_mode=execution_mode,
                 max_workers=max_workers,
-                workspace_root=trial_workspace_root,
+                trials_root=trials_root,
+                workspace_root=workspace_root,
                 keep_trial_workspaces=keep_trial_workspaces,
                 isolate_snapshots=isolate_snapshots,
                 **kwargs
@@ -1300,7 +1410,7 @@ class Optimizer(abc.ABC):
     @silence_cost_logs
     async def async_optimize(
         self,
-        evaluate_fn: Callable[[ProgramAdapter], Awaitable[EvaluationReturn]],
+        evaluate_fn: Callable[..., Awaitable[EvaluationReturn]],
         objective: Objective,
         max_trials: int = 3,
         save_dir: Optional[str] = None,
@@ -1317,6 +1427,11 @@ class Optimizer(abc.ABC):
 
         Args:
             evaluate_fn: Async callable returning either metric dicts or EvaluationResult objects.
+                         May be declared as `fn(adapter)` or `fn(adapter, context)`; the second
+                         parameter must be named `ctx`/`context`/`trial_context` (or annotated
+                         `TrialContext`) to receive a `TrialContext` carrying the trial id and
+                         the persistent per-trial directory (`<save_dir>/trials/...`) where
+                         evaluation results can be archived.
             objective: Optimization objective.
             max_trials: Total number of individual trials to run.
             save_dir: Directory to write per-trial state checkpoints.
@@ -1345,7 +1460,7 @@ class Optimizer(abc.ABC):
         state = self._init_run_state(save_dir, resume_from)
         start_step = state.current_step
         self.load_optimizer_state(state)
-        trial_workspace_root = self._resolve_workspace_root(state, save_dir, resume_from, workspace_root)
+        trials_root = self._resolve_trials_root(state, save_dir, resume_from)
         progress = OptimizationProgress(total=max_trials, initial=state.current_step)
 
         # Evaluate baseline once if not yet done; persists so resume skips this.
@@ -1353,17 +1468,19 @@ class Optimizer(abc.ABC):
         if baseline_record is not None and baseline_record.metrics is None:
             baseline_snapshot = state.get_snapshot_by_id(baseline_record.snapshot_id)
             baseline_adapter = self.adapter.load_snapshot(baseline_snapshot) if baseline_snapshot is not None else self.adapter
+            baseline_trial_dir: Optional[str] = None
             baseline_workspace: Optional[TrialWorkspace] = None
             baseline_validation_results: List[ValidationResult] = []
             try:
                 if baseline_snapshot is None:
                     raise RuntimeError("Baseline snapshot is missing from optimization state.")
                 baseline_adapter._validate_snapshot(baseline_snapshot, context="baseline snapshot")
-                baseline_workspace = _prepare_trial_workspace(
+                baseline_trial_dir, baseline_workspace = _prepare_trial_dirs(
                     baseline_adapter,
                     baseline_snapshot,
                     BASELINE_TRIAL_ID,
-                    trial_workspace_root,
+                    trials_root,
+                    workspace_root,
                     keep_trial_workspaces,
                     metadata={"baseline": True},
                     **kwargs,
@@ -1380,7 +1497,15 @@ class Optimizer(abc.ABC):
                 validation_error = _validation_failure_message(baseline_validation_results)
                 if validation_error is not None:
                     raise RuntimeError(validation_error)
-                evaluation = _normalize_evaluation_result(await evaluate_fn(baseline_adapter), BASELINE_TRIAL_ID)
+                baseline_context = TrialContext(
+                    trial_id=BASELINE_TRIAL_ID,
+                    trial_dir=baseline_trial_dir,
+                    workspace=baseline_workspace,
+                    metadata={"baseline": True},
+                )
+                evaluation = _normalize_evaluation_result(
+                    await _call_evaluate_fn(evaluate_fn, baseline_adapter, baseline_context), BASELINE_TRIAL_ID
+                )
                 captured_baseline = await baseline_adapter.async_capture_after_eval(
                     snapshot=baseline_snapshot,
                     evaluation=evaluation,
@@ -1398,12 +1523,14 @@ class Optimizer(abc.ABC):
                 baseline_record.artifacts = evaluation.artifacts
                 baseline_record.metadata = evaluation.metadata
                 baseline_record.validation_results = baseline_validation_results
+                baseline_record.trial_dir = baseline_trial_dir
                 baseline_record.workspace_dir = baseline_workspace.root_dir if baseline_workspace is not None else None
                 baseline_record.error = None
                 self._checkpoint(state)
             except Exception as exc:
                 baseline_record.status = "failed"
                 baseline_record.validation_results = baseline_validation_results
+                baseline_record.trial_dir = baseline_trial_dir
                 baseline_record.workspace_dir = baseline_workspace.root_dir if baseline_workspace is not None else None
                 baseline_record.error = str(exc)
                 self._checkpoint(state)
@@ -1437,7 +1564,8 @@ class Optimizer(abc.ABC):
                 objective=objective,
                 execution_mode=execution_mode,
                 max_workers=max_workers,
-                workspace_root=trial_workspace_root,
+                trials_root=trials_root,
+                workspace_root=workspace_root,
                 keep_trial_workspaces=keep_trial_workspaces,
                 isolate_snapshots=isolate_snapshots,
                 **kwargs

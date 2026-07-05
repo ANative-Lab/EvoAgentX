@@ -7,6 +7,10 @@ from jsonschema import validate, ValidationError
 from typing import Any, Dict, Iterable, List, Optional, Literal, Union
 
 from ...core.module import BaseModule
+# EvaluationResult is defined in evaluators/ (the evaluation layer the optimizer consumes)
+# and re-exported here for backward compatibility. The dependency direction is
+# optimizers -> evaluators; evaluators never imports optimizers.
+from ...evaluators.result import EvaluationResult  # noqa: F401  (re-exported)
 
 class OptimizationUnitType(str, Enum):
     # Generic structured field or scalar parameter that has no more specific type.
@@ -275,14 +279,6 @@ class OptimizationProposal(BaseModule):
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Optimizer-defined metadata for the proposal, such as parent IDs, generation number, sampler params, or rationale.")
 
 
-class EvaluationResult(BaseModule):
-    """Structured result returned by evaluation functions."""
-    metrics: Dict[str, Any] = Field(description="Objective-facing metrics for this trial.")
-    traces: Optional[List[Any]] = Field(default_factory=list, description="Optional execution traces or trajectory data collected during evaluation.")
-    artifacts: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Optional produced artifacts such as summaries, retrieved memories, file paths, generated skills, or debug payloads.")
-    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Optional evaluation metadata such as split name, cost, latency, seeds, or evaluator configuration.")
-
-
 ValidationStatus = Literal["passed", "failed", "skipped"]
 
 
@@ -312,6 +308,7 @@ class TrialRecord(BaseModule):
     artifacts: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Artifacts produced or consumed during evaluation.")
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Trial-level metadata, including structured evaluator metadata or optimizer bookkeeping.")
     validation_results: List[ValidationResult] = Field(default_factory=list, description="Validation results collected before evaluation.")
+    trial_dir: Optional[str] = Field(default=None, description="Persistent per-trial directory under <save_dir>/trials where evaluation results are archived, if the run has a save_dir.")
     workspace_dir: Optional[str] = Field(default=None, description="Trial workspace directory used to isolate file-backed artifacts, if any.")
     error: Optional[str] = Field(default=None, description="Error message if the trial failed")
 

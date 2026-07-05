@@ -85,6 +85,33 @@ class TrialWorkspace:
         }
 
 
+@dataclass
+class TrialContext:
+    """Per-trial context the engine passes to ``evaluate_fn`` as an optional second argument.
+
+    An ``evaluate_fn`` may be declared either as ``fn(adapter)`` or ``fn(adapter, context)``.
+    Receiving the context is opt-in by signature: the engine passes it only when the second
+    positional parameter is named ``ctx`` / ``context`` / ``trial_context`` or is annotated
+    as ``TrialContext`` (so e.g. ``fn(adapter, split="dev")`` keeps its single-argument
+    behavior instead of silently receiving a context).
+
+    Attributes:
+        trial_id: The trial being evaluated (``BASELINE_TRIAL_ID`` for the baseline).
+        trial_dir: Persistent per-trial directory under ``<save_dir>/trials/`` where the
+            evaluator can archive results (e.g. an ``EvaluationPipeline`` ``output_dir``).
+            None when the run has no ``save_dir``. Unlike a ``TrialWorkspace``, this
+            directory is never cleaned up by the engine.
+        workspace: The adapter's trial workspace (file sandbox), if workspace isolation
+            is enabled for this trial. Subject to ``keep_trial_workspaces`` cleanup.
+        metadata: Proposal metadata for trial evaluations; ``{"baseline": True}`` for
+            the baseline evaluation.
+    """
+    trial_id: int
+    trial_dir: Optional[str] = None
+    workspace: Optional[TrialWorkspace] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
 class ProgramAdapter(abc.ABC):
 
     #: Whether trials need an isolated, per-trial filesystem workspace.
@@ -401,10 +428,9 @@ class ProgramAdapter(abc.ABC):
     async def async_execute(self, *args, **kwargs) -> Any:
         """Run the adapted program asynchronously.
 
-        The same reentrancy contract as ``execute`` applies. The default implementation
-        delegates to ``execute`` for adapters that only implement a synchronous runner.
+        The same reentrancy contract as ``execute`` applies.
         """
-        return self.execute(*args, **kwargs)
+        raise NotImplementedError(f"{self.__class__.__name__} does not implement async_execute().")
 
     @abc.abstractmethod
     def register_units(self) -> List[OptimizationUnit]:

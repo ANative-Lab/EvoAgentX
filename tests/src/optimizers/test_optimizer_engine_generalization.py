@@ -1065,3 +1065,122 @@ def test_isolate_snapshots_false_leaves_source_snapshot_intact(tmp_path):
     state = OptimizationRunState.load_state(str(tmp_path))
     baseline = state.get_baseline_record()
     assert state.get_snapshot_by_id(baseline.snapshot_id).unit_values["prompt"] == "base"
+
+
+# ---------------------------------------------------------------------------
+# Trial directories + TrialContext passed to two-argument evaluate_fn
+# ---------------------------------------------------------------------------
+
+def test_trial_dirs_created_and_context_passed_to_evaluate_fn(tmp_path):
+    from evoagentx.optimizers.engine.adapter import TrialContext
+
+    seen_contexts: List[TrialContext] = []
+
+    def evaluate(adapter, context):
+        seen_contexts.append(context)
+        assert context.trial_dir is not None and os.path.isdir(context.trial_dir)
+        # the evaluator can archive results into the trial dir
+        with open(os.path.join(context.trial_dir, "eval.txt"), "w") as f:
+            f.write("done")
+        return {"score": len(adapter.execute()["prompt"])}
+
+    optimizer = PromptOnlyOptimizer(DummyAdapter())
+    optimizer.optimize(
+        evaluate_fn=evaluate,
+        objective=ScalarObjective(metric="score", direction="maximize"),
+        max_trials=1,
+        save_dir=str(tmp_path),
+    )
+
+    # baseline + 1 trial, each with its own directory under <save_dir>/trials
+    assert len(seen_contexts) == 2
+    assert seen_contexts[0].trial_id == 0 and seen_contexts[0].metadata == {"baseline": True}
+    trial_dirs = {ctx.trial_dir for ctx in seen_contexts}
+    assert len(trial_dirs) == 2
+    for trial_dir in trial_dirs:
+        assert os.path.dirname(trial_dir) == os.path.join(str(tmp_path), "trials")
+        assert os.path.exists(os.path.join(trial_dir, "eval.txt")), "archived results must survive the trial"
+
+    # trial_dir is recorded on the trial records
+    state = OptimizationRunState.load_state(str(tmp_path))
+    for record in state.trial_records:
+        assert record.trial_dir in trial_dirs
+
+
+def test_second_param_not_named_context_does_not_receive_it(tmp_path):
+    """`def evaluate(adapter, split="dev")` must keep its default, not get a TrialContext."""
+    seen_splits = []
+
+    def evaluate(adapter, split="dev"):
+        seen_splits.append(split)
+        return {"score": len(adapter.execute()["prompt"])}
+
+    PromptOnlyOptimizer(DummyAdapter()).optimize(
+        evaluate_fn=evaluate,
+        objective=ScalarObjective(metric="score", direction="maximize"),
+        max_trials=1,
+        save_dir=str(tmp_path),
+    )
+    assert seen_splits == ["dev", "dev"]  # baseline + trial, default untouched
+
+
+def test_annotated_second_param_receives_context(tmp_path):
+    from evoagentx.optimizers.engine.adapter import TrialContext
+
+    seen = []
+
+    def evaluate(adapter, run_info: TrialContext = None):  # non-standard name, typed
+        seen.append(run_info)
+        return {"score": len(adapter.execute()["prompt"])}
+
+    PromptOnlyOptimizer(DummyAdapter()).optimize(
+        evaluate_fn=evaluate,
+        objective=ScalarObjective(metric="score", direction="maximize"),
+        max_trials=1,
+        save_dir=str(tmp_path),
+    )
+    assert len(seen) == 2
+    assert all(isinstance(c, TrialContext) for c in seen)
+
+
+def test_single_arg_evaluate_fn_still_supported(tmp_path):
+    best = PromptOnlyOptimizer(DummyAdapter()).optimize(
+        evaluate_fn=lambda a: {"score": len(a.execute()["prompt"])},
+        objective=ScalarObjective(metric="score", direction="maximize"),
+        max_trials=1,
+        save_dir=str(tmp_path),
+    )
+    assert best.execute()["prompt"] == "improved prompt"
+
+
+def test_no_save_dir_means_no_trial_dirs():
+    def evaluate(adapter, context):
+        assert context.trial_dir is None
+        return {"score": len(adapter.execute()["prompt"])}
+
+    best = PromptOnlyOptimizer(DummyAdapter()).optimize(
+        evaluate_fn=evaluate,
+        objective=ScalarObjective(metric="score", direction="maximize"),
+        max_trials=1,
+    )
+    assert best.execute()["prompt"] == "improved prompt"
+
+
+def test_uses_workspace_adapter_gets_workspace_inside_trial_dir(tmp_path):
+    seen = {}
+
+    def evaluate(adapter, context):
+        seen["context"] = context
+        return {"score": int("new_skill" in adapter.execute()["content"])}
+
+    SkillCodeOptimizer(SkillFileAdapter()).optimize(
+        evaluate_fn=evaluate,
+        objective=ScalarObjective(metric="score"),
+        max_trials=1,
+        save_dir=str(tmp_path),
+    )
+
+    context = seen["context"]
+    assert context.workspace is not None
+    assert context.workspace.root_dir == os.path.join(context.trial_dir, "workspace")
+    assert os.path.exists(context.workspace.path("skills.py"))

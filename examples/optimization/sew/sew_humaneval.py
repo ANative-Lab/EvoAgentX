@@ -6,7 +6,9 @@ from dotenv import load_dotenv
 
 from evoagentx.benchmark import HumanEval
 from evoagentx.core.logging import logger
+from evoagentx.evaluators import DataLoader, EvaluationPipeline
 from evoagentx.models import OpenRouterConfig, OpenRouterLLM
+from evoagentx.optimizers.engine.adapter import TrialContext
 from evoagentx.optimizers.engine.objective import ScalarObjective
 from evoagentx.optimizers.sew_optimizer import SEWOptimizer, SEWWorkFlowAdapter
 from evoagentx.prompts import ChatTemplate
@@ -59,35 +61,57 @@ class HumanEvalSplits(HumanEval):
         self._test_data = [self._test_data[i] for i in permutation[num_dev_samples:]]
 
 
-async def _score_one(adapter: SEWWorkFlowAdapter, benchmark: HumanEval, example: dict) -> float:
-    """Run the workflow on one example and return its pass@1 (1.0 if it passes, else 0.0)."""
-    try:
-        execution_result: WorkflowResult = await adapter.async_execute(inputs={"question": example["prompt"]})
-        if execution_result.status == "success":
-            result = execution_result.result
-            code = result.get("code", "") if isinstance(result, dict) else result
-        else:
-            code = execution_result.error_msg
-        metrics = benchmark.evaluate(prediction=code, label=benchmark._get_label(example))
-        return float(metrics.get("pass@1", 0.0))
-    except Exception as exc:  # a single bad sample shouldn't abort the whole evaluation
-        logger.warning(f"Evaluation failed for {example['task_id']}: {exc}")
-        return 0.0
+# --- The three small hooks that adapt the black-box program to the benchmark I/O ----- #
+# input_fn:  benchmark example  -> the dict SEWWorkFlowAdapter.execute expects.
+# output_fn: the raw WorkflowResult -> the prediction string the scorer/benchmark wants.
+def _example_to_input(example: dict) -> dict:
+    return {"question": example["prompt"]}
 
 
-def make_evaluate_fn(benchmark: HumanEval, dataset: list, concurrency: int):
-    """Build the async ``evaluate_fn`` the optimizer calls on every (baseline + trial) adapter."""
-    semaphore = asyncio.Semaphore(concurrency)
+def _extract_code(execution_result: WorkflowResult) -> str:
+    if execution_result.status == "success":
+        result = execution_result.result
+        return result.get("code", "") if isinstance(result, dict) else result
+    return execution_result.error_msg or ""
 
-    async def _bounded(adapter, example):
-        async with semaphore:
-            return await _score_one(adapter, benchmark, example)
 
-    async def evaluate_fn(adapter: SEWWorkFlowAdapter) -> dict:
+def make_evaluate_fn(benchmark: HumanEval, split: str, sample_num: int, concurrency: int):
+    """Build the async ``evaluate_fn`` the optimizer calls on every (baseline + trial) adapter.
+
+    The whole evaluation is delegated to a reusable ``EvaluationPipeline``:
+        DataLoader (which examples) + program (the adapter) + scorer (benchmark.evaluate).
+    The adapter is the ``program``; the pipeline calls it via ``__call__`` (-> async_execute
+    inside the running loop). Per-item failures are captured and, via ``on_error="zero"``
+    (the ``to_result`` default), count as 0 toward the score — matching SEW's semantics that
+    a crashing solution scores 0 rather than being silently dropped.
+
+    ``evaluate_fn`` takes an optional second ``TrialContext`` argument: when the optimizer
+    calls it, ``ctx.trial_dir`` points at this trial's persistent directory under
+    ``<save_dir>/trials/``, and the pipeline streams the full per-item log (predictions,
+    metrics, tracebacks) there as ``report.jsonl``. Called directly (e.g. the before/after
+    test evaluation below), ``ctx`` is None and nothing is written to disk.
+    """
+    # A new DataLoader per call keeps each evaluation independent; ``sample_k``+``seed`` make
+    # the dev/test subset deterministic across every trial so candidates are compared fairly.
+    pipeline = EvaluationPipeline(max_concurrency=concurrency, verbose=False)
+
+    def scorer(prediction, label) -> dict:
+        return benchmark.evaluate(prediction=prediction, label=label)
+
+    async def evaluate_fn(adapter: SEWWorkFlowAdapter, ctx: TrialContext=None):
         # No suppress_logger_info() needed: SEWWorkFlowAdapter.async_execute suppresses
         # the workflow's per-step logs itself (contextvar-scoped, so it's concurrency-safe).
-        scores = await asyncio.gather(*[_bounded(adapter, ex) for ex in dataset])
-        return {"pass@1": float(np.mean(scores)) if scores else 0.0}
+        loader = DataLoader(benchmark, split=split, sample_k=sample_num, seed=42)
+        report = await pipeline.arun(
+            adapter,
+            loader,
+            scorer,
+            input_fn=_example_to_input,
+            output_fn=_extract_code,
+            output_dir=os.path.join(ctx.trial_dir, f"eval_{split}") if ctx and ctx.trial_dir else None,
+        )
+        # Explicit bridge: per-item report -> objective-facing EvaluationResult.
+        return report.to_result()
 
     return evaluate_fn
 
@@ -113,11 +137,9 @@ async def main():
 
     # 3) Benchmark + evaluation/objective wiring.
     benchmark = HumanEvalSplits()
-    dev_data = benchmark.get_dev_data(sample_k=DEV_SAMPLE_NUM, seed=42)
-    test_data = benchmark.get_test_data(sample_k=TEST_SAMPLE_NUM, seed=42)
     objective = ScalarObjective(metric="pass@1", direction="maximize")
-    dev_evaluate_fn = make_evaluate_fn(benchmark, dev_data, EVAL_CONCURRENCY)
-    test_evaluate_fn = make_evaluate_fn(benchmark, test_data, EVAL_CONCURRENCY)
+    dev_evaluate_fn = make_evaluate_fn(benchmark, "dev", DEV_SAMPLE_NUM, EVAL_CONCURRENCY)
+    test_evaluate_fn = make_evaluate_fn(benchmark, "test", TEST_SAMPLE_NUM, EVAL_CONCURRENCY)
 
     # 4) The optimizer: re-mutate every prompt each round, steered by the workflow goal.
     optimizer = SEWOptimizer(
@@ -129,8 +151,9 @@ async def main():
         seed=42,
     )
 
-    # Evaluate the un-optimized workflow on the held-out test split.
-    before = await test_evaluate_fn(adapter)
+    # Evaluate the un-optimized workflow on the held-out test split. evaluate_fn now returns
+    # an EvaluationResult (the optimizer-facing summary); its aggregated metrics are in .metrics.
+    before = (await test_evaluate_fn(adapter)).metrics
     logger.info(f"Test pass@1 BEFORE optimization: {before['pass@1']:.4f}")
 
     # 5) Optimize. Returns the adapter rebuilt from the best-scoring snapshot.
@@ -145,7 +168,7 @@ async def main():
     # best_adapter = optimizer.load_optimized(SAVE_DIR)
 
     # Evaluate the optimized workflow on the same test split.
-    after = await test_evaluate_fn(best_adapter)
+    after = (await test_evaluate_fn(best_adapter)).metrics
     logger.info(f"Test pass@1 AFTER optimization:  {after['pass@1']:.4f}")
 
     logger.info("Optimized prompts:")
