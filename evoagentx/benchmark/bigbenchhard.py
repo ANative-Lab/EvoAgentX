@@ -13,7 +13,7 @@ import torch
 from typing import Any, List, Optional
 
 from .benchmark import Benchmark
-from .measures import exact_match_score
+from .scorers import QAScorer
 from ..core.logging import logger
 from ..core.module_utils import load_json
 from ..utils.utils import download_file
@@ -100,11 +100,17 @@ class BIGBenchHard(Benchmark):
         self.file_name = ALL_TASKS[task]
         self.dev_sample_num = dev_sample_num
         self.seed = seed
+        self.scorer = QAScorer(metrics=["em"], normalize_fn=self._normalize_for_scoring)
         
         # Set default path if not provided
         path = os.path.expanduser(path or f"~/.evoagentx/data/bigbenchhard/{task}")
         
         super().__init__(name=f"BIGBenchHard-{self.task}", path=path, mode=mode, **kwargs)
+
+    def _normalize_for_scoring(self, value: Any) -> Any:
+        if self.task == "dyck_languages":
+            return str(value).replace(" ", "")
+        return value
 
     def _load_data_from_file(self, file_name: str) -> Optional[List[dict]]:
         """
@@ -221,11 +227,4 @@ class BIGBenchHard(Benchmark):
         Returns:
             Dictionary containing the exact match score
         """
-        if self.task == "dyck_languages":
-            # For Dyck languages, use special evaluation (ignore whitespace)
-            em = prediction.replace(' ', '') == label.replace(' ', '')
-            return {"em": em}
-        else:
-            # Standard exact match evaluation
-            em = exact_match_score(prediction=prediction, ground_truth=label)
-            return {"em": em}
+        return self.scorer.score(prediction=prediction, label=label)

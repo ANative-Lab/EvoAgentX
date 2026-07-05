@@ -5,7 +5,7 @@ from pathlib import Path
 
 from datasets import load_dataset
 from .benchmark import Benchmark
-from .measures import exact_match_score, f1_score, acc_score
+from .scorers import QAScorer
 from ..core.logging import logger
 
 
@@ -93,6 +93,7 @@ class RealMMRAG(Benchmark):
     
     def __init__(self, path: str = None, mode: str = "test", **kwargs):
         path = os.path.expanduser(path or "~/.evoagentx/data/real_mm_rag")
+        self.scorer = QAScorer(metrics=["f1", "em", "acc"])
         
         # Set up file paths before calling super().__init__ which calls _load_data
         self.dataset_file = Path(path) / "real_mm_rag_finreport.json"
@@ -122,11 +123,7 @@ class RealMMRAG(Benchmark):
         return example["id"]
     
     def evaluate(self, prediction: Any, label: Any) -> dict:
-        # For multimodal, we can use simple string matching
-        em = exact_match_score(prediction=prediction, ground_truth=label)
-        f1 = f1_score(prediction=prediction, ground_truth=label)
-        acc = acc_score(prediction=prediction, ground_truths=[label])
-        return {"f1": f1, "em": em, "acc": acc}
+        return self.scorer.score(prediction=prediction, label=label)
     
     @property
     def data(self) -> List[Dict[str, Any]]:

@@ -22,7 +22,8 @@ from pydantic import Field, PositiveInt
 from tqdm import tqdm
 
 from ...agents import Agent, CustomizeAgent
-from ...benchmark.benchmark import Benchmark, CodingBenchmark
+from ...benchmark.benchmark import Benchmark
+from ...benchmark.scorers import CodeScorer
 from ...core.callbacks import suppress_logger_info
 from ...core.logging import logger
 from ...core.module import BaseModule
@@ -182,7 +183,9 @@ class TextGradOptimizer(BaseModule):
         self._validate_graph_compatibility(self.graph)
         self._snapshot: List[dict] = []
         self.output_lookup = self._create_output_lookup()
-        
+
+    def _is_coding_benchmark(self, dataset: Benchmark) -> bool:
+        return isinstance(getattr(dataset, "scorer", None), CodeScorer)
 
     def _init_textgrad(self, dataset: Benchmark, use_answers: bool = True):
         # Disable TextGrad's short variable value to allow the optimizer to receive the full variable value
@@ -195,7 +198,7 @@ class TextGradOptimizer(BaseModule):
 
         # Textgrad loss
         if use_answers:
-            if isinstance(dataset, CodingBenchmark):
+            if self._is_coding_benchmark(dataset):
                 loss_prompt = CODE_LOSS_PROMPT
                 role_descriptions = ["code snippet to evaluate", "the task, the test result of the code snippet, and the correct code"]
             else:
@@ -327,7 +330,7 @@ class TextGradOptimizer(BaseModule):
                 if isinstance(label, str):
                     label = Variable(label, requires_grad=False, role_description="correct answer for the query")
                 elif isinstance(label, dict):
-                    if not isinstance(dataset, CodingBenchmark):
+                    if not self._is_coding_benchmark(dataset):
                         raise ValueError("Label must be a string for non-coding benchmarks.")
                     end_node_name = self.graph.find_end_nodes()[0]
                     end_node = self.graph.get_node(end_node_name)
@@ -448,13 +451,13 @@ class TextGradOptimizer(BaseModule):
         logger.info(f"Restored the best graph from snapshot with metrics {best_metrics}")
 
 
-    def _format_code_label(self, code: str, label:dict[str, str], dataset: CodingBenchmark) -> str:
+    def _format_code_label(self, code: str, label:dict[str, str], dataset: Benchmark) -> str:
         """Formats the label for coding tasks to include the task, the test result, and the correct code.
 
         Args:
             code: The code to evaluate.
             label: A dictionary with keys "task_id", "test", "entry_point", and "canonical_solution".
-            dataset: A CodingBenchmark instance with `check_solution` method.
+            dataset: A benchmark instance with a `CodeScorer`.
         
         Returns:
             The formatted label which includes the task, the test result, and the correct code.
@@ -465,14 +468,15 @@ class TextGradOptimizer(BaseModule):
         test = label["test"]
         entry_point = label["entry_point"]
 
-        state, message = dataset.check_solution(
+        scorer: CodeScorer = dataset.scorer
+        state, message = scorer.check_solution(
             task_id=task_id,
             solution=prompt + "\n" + code,
             test=test,
             entry_point=entry_point
         )
 
-        if state != dataset.SUCCESS:
+        if state != scorer.SUCCESS:
             message = message.replace("Solution", "Failed Code")
 
         formatted_label = f"## Task:\n{prompt}\n\n## Result on test:\n{message}\n\n## Correct Solution:\n{label['canonical_solution']}"

@@ -1,8 +1,8 @@
 import os
-import regex 
 from typing import Any, List, Callable
 from ..core.logging import logger
 from .benchmark import Benchmark
+from .scorers import MathScorer
 from ..utils.utils import download_file
 from ..core.module_utils import load_json
 from ..utils.aflow_utils.data_utils import AFLOW_DATASET_FILES_MAP, download_aflow_benchmark_data
@@ -58,6 +58,7 @@ class GSM8K(Benchmark):
     
     def __init__(self, path: str = None, mode: str = "all", **kwargs):
         path = os.path.expanduser(path or "~/.evoagentx/data/gsm8k")
+        self.scorer = MathScorer(mode="numeric", tol=1e-6)
         super().__init__(name=type(self).__name__, path=path, mode=mode, **kwargs)
 
     def _load_data_from_file(self, file_name: str):
@@ -88,23 +89,10 @@ class GSM8K(Benchmark):
         """
         Extract the last number from a text.
         """
-        matches = regex.findall(r"[-+]?\d+(?:,\d{3})*(?:\.\d+)?|\d+\.\d+", str(text))
-        if matches:
-            last_number = matches[-1].replace(",", "").strip()
-            try:
-                last_number = float(last_number)
-                return last_number
-            except ValueError:
-                return None
-        return None
+        return self.scorer._extract_numeric(text)
     
     def evaluate(self, prediction: Any, label: Any) -> dict:
-        ground_truth_answer = self.extract_last_number(label)
-        predicted_answer = self.extract_last_number(prediction)
-        if predicted_answer is None:
-            return {"solve_rate": 0.0}
-        solve_rate = 1.0 if abs(predicted_answer - ground_truth_answer) < 1e-6 else 0.0
-        return {"solve_rate": solve_rate}
+        return self.scorer.score(prediction=prediction, label=label)
 
 
 class AFlowGSM8K(GSM8K): 

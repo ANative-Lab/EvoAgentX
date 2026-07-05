@@ -44,16 +44,16 @@ class QAScorer(Scorer):
             prediction, label = self.normalize_fn(prediction), self.normalize_fn(label)
 
         refs: List[Any] = label if self.multi_reference else [label]
-        out: Metrics = {}
-
+        values = {}
         if "em" in self.metrics:
-            if self.multi_reference:
-                out["em"] = ems(prediction=prediction, ground_truths=refs)
-            else:
-                out["em"] = exact_match_score(prediction=prediction, ground_truth=label)
+            values["em"] = (
+                ems(prediction=prediction, ground_truths=refs)
+                if self.multi_reference
+                else exact_match_score(prediction=prediction, ground_truth=label)
+            )
         if "f1" in self.metrics:
-            out["f1"] = max(f1_score(prediction=prediction, ground_truth=r) for r in refs)
+            values["f1"] = max(f1_score(prediction=prediction, ground_truth=r) for r in refs)
         if "acc" in self.metrics:
-            out["acc"] = acc_score(prediction=prediction, ground_truths=refs)
+            values["acc"] = acc_score(prediction=prediction, ground_truths=refs)
 
-        return out
+        return {key: values[key] for key in self.metrics if key in values}

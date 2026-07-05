@@ -2,10 +2,11 @@ import os
 import regex
 from typing import Union, Any, List, Callable
 from ..core.logging import logger
-from .benchmark import CodingBenchmark 
+from .benchmark import Benchmark
 from ..utils.utils import download_file
 from ..core.module_utils import load_json
 from ..utils.aflow_utils.data_utils import AFLOW_DATASET_FILES_MAP, download_aflow_benchmark_data
+from .scorers import CodeScorer
 
 
 def download_raw_mbpp_data(name: str, save_folder: str):
@@ -78,7 +79,7 @@ def load_mbpp_data(data_path: str):
     return data
 
 
-class MBPP(CodingBenchmark):
+class MBPP(Benchmark):
 
     """Benchmark class for evaluating code generation on the MBPP dataset.
     
@@ -106,7 +107,14 @@ class MBPP(CodingBenchmark):
     def __init__(self, path: str = None, mode: str = "all", timeout: int = 60, k: Union[int, list] = 1,**kwargs):
         path = os.path.expanduser(path or "~/.evoagentx/data/mbpp")
         self.k = k 
-        super().__init__(name=type(self).__name__, path=path, mode=mode, timeout=timeout, **kwargs)
+        self.timeout = timeout
+        super().__init__(name=type(self).__name__, path=path, mode=mode, **kwargs)
+        self.scorer = CodeScorer(
+            k=self.k,
+            timeout=self.timeout,
+            prompt_joiner="\n",
+            prompt_getter=lambda task_id: self.get_example_by_id(task_id)["prompt"],
+        )
     
     def _load_data(self):
 
@@ -145,31 +153,7 @@ class MBPP(CodingBenchmark):
         Returns:
             dict: The evaluation metrics (pass@k).
         """
-        prediction, label = self._check_evaluation_inputs(prediction, label)
-
-        results = []
-        for solution in prediction:
-            solution_states = []
-            for label_data in label:
-                task_id = label_data["task_id"]
-                prompt = self.get_example_by_id(task_id)["prompt"]
-                unit_test = label_data["test"]
-                entry_point = label_data["entry_point"]
-                state, message = self.check_solution(
-                    task_id=task_id, 
-                    solution=prompt + "\n" + solution,
-                    test=unit_test, 
-                    entry_point=entry_point
-                )
-                if state != self.SUCCESS:
-                    break 
-                solution_states.append(state)
-            results.append(len(solution_states)==len(label) and all(state==self.SUCCESS for state in solution_states))
-        
-        k_list = [self.k] if isinstance(self.k, int) else self.k
-        pass_at_k = self.compute_pass_at_k(results, k_list)
-        
-        return pass_at_k
+        return self.scorer.score(prediction=prediction, label=label)
     
 
 
@@ -182,6 +166,13 @@ class AFlowMBPP(MBPP):
     def __init__(self, path: str = None, mode: str = "all", timeout: int = 60, k: Union[int, list] = 1,**kwargs):
         path = os.path.expanduser(path or "~/.evoagentx/data/aflow/mbpp")
         super().__init__(path=path, mode=mode, timeout=timeout, k=k, **kwargs)
+        self.scorer = CodeScorer(
+            k=self.k,
+            timeout=self.timeout,
+            prompt_joiner="\n",
+            prompt_getter=lambda task_id: self.get_example_by_id(task_id)["prompt"],
+            use_entrypoint_as_input=False,
+        )
 
     def _load_data_from_file(self, file_name: str):
         if file_name is None:
@@ -256,30 +247,4 @@ class AFlowMBPP(MBPP):
         Returns:
             dict: The evaluation metrics (pass@k).
         """
-        prediction, label = self._check_evaluation_inputs(prediction, label)
-
-        results = []
-        for solution in prediction:
-            solution_states = []
-            for label_data in label:
-                task_id = label_data["task_id"]
-                prompt = self.get_example_by_id(task_id)["prompt"]
-                unit_test = label_data["test"]
-                entry_point = label_data["entry_point"]
-                state, message = self.check_solution(
-                    task_id=task_id, 
-                    solution=prompt + "\n" + solution,
-                    test=unit_test, 
-                    entry_point=entry_point,
-                    use_entrypoint_as_input=False
-                )
-                if state != self.SUCCESS:
-                    break 
-                solution_states.append(state)
-            results.append(len(solution_states)==len(label) and all(state==self.SUCCESS for state in solution_states))
-        
-        k_list = [self.k] if isinstance(self.k, int) else self.k
-        pass_at_k = self.compute_pass_at_k(results, k_list)
-        
-        return pass_at_k
-    
+        return self.scorer.score(prediction=prediction, label=label)

@@ -1,7 +1,7 @@
 import os 
 from typing import Any, List
 from .benchmark import Benchmark
-from .measures import ems, f1_score, acc_score
+from .scorers import QAScorer
 from ..core.logging import logger
 from ..utils.utils import download_file
 
@@ -56,6 +56,7 @@ class NQ(Benchmark):
 
     def __init__(self, path: str = None, mode: str = "all", **kwargs):
         path = os.path.expanduser(path or "~/.evoagentx/data/nq")
+        self.scorer = QAScorer(multi_reference=True, metrics=["f1", "em", "acc"])
         super().__init__(name=type(self).__name__, path=path, mode=mode, **kwargs)
 
     def _load_data_from_file(self, file_name: str):
@@ -82,8 +83,4 @@ class NQ(Benchmark):
         return example["id"]
     
     def evaluate(self, prediction: Any, label: Any) -> dict:
-        em = ems(prediction=prediction, ground_truths=label)
-        f1 = max(f1_score(prediction=prediction, ground_truth=one_answer) for one_answer in label)
-        acc = acc_score(prediction=prediction, ground_truths=label)
-        return {"f1": f1, "em": em, "acc": acc}
-            
+        return self.scorer.score(prediction=prediction, label=label)

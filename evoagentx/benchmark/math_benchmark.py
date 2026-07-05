@@ -1,15 +1,11 @@
 import os
-import regex 
 import zipfile
 import requests
-from math import isclose
 from typing import Any, List, Callable
-from sympy import N, simplify
-from sympy.parsing.latex import parse_latex
-from sympy.parsing.sympy_parser import parse_expr
 
 from ..core.logging import logger
 from .benchmark import Benchmark
+from .scorers import MathScorer
 from ..utils.utils import make_parent_folder
 from ..core.module_utils import load_json
 from ..utils.aflow_utils.data_utils import AFLOW_DATASET_FILES_MAP, download_aflow_benchmark_data
@@ -66,6 +62,7 @@ class MATH(Benchmark):
 
     def __init__(self, path: str = None, mode: str = "all", **kwargs):
         path = os.path.expanduser(path or "~/.evoagentx/data/math")
+        self.scorer = MathScorer(mode="symbolic", tol=1e-3)
         super().__init__(name=type(self).__name__, path=path, mode=mode, **kwargs)
     
     def _load_data_from_folders(self, data_folder: str) -> List[dict]:
@@ -107,85 +104,23 @@ class MATH(Benchmark):
         return example["id"] 
     
     def extract_answer(self, text: str) -> str: 
-
-        pattern = r"\\boxed{((?:[^{}]|{[^{}]*})*)}"
-        boxed_matches = regex.findall(pattern, text, regex.DOTALL)
-        if boxed_matches:
-            return boxed_matches[-1].strip()
-        
-        sentence_end_pattern = r"(?<!\d)[.!?]\s+"
-        sentences = regex.split(sentence_end_pattern, text)
-        sentences = [s.strip() for s in sentences if s.strip()]
-        return sentences[-1] if sentences else ""
+        return self.scorer._extract_symbolic(text)
     
     # Acknowledgement: https://github.com/geekan/MetaGPT/blob/main/metagpt/ext/aflow/benchmark/math.py#L40 
     def math_equal(self, prediction: Any, reference: Any) -> bool:
-        if str(prediction) == str(reference):
-            return True
-        
-        try:
-            if self.is_digit(prediction) and self.is_digit(reference):
-                prediction = self.parse_digits(prediction)
-                reference = self.parse_digits(reference)
-                return isclose(prediction, reference, abs_tol=1e-3)
-        except Exception:
-            pass
-
-        try:
-            return self.symbolic_equal(prediction, reference)
-        except Exception:
-            pass
-
-        return False
+        return self.scorer._symbolic_equal(prediction, reference)
     
     def is_digit(self, num: Any) -> bool:
-        return self.parse_digits(num) is not None
+        return self.scorer._is_digit(num)
     
     def parse_digits(self, num: Any) -> float:
-        num = regex.sub(",", "", str(num))
-        try:
-            return float(num)
-        except Exception:
-            if num.endswith("%"):
-                num = num[:-1]
-                if num.endswith("\\"):
-                    num = num[:-1]
-                try:
-                    return float(num) / 100
-                except Exception:
-                    pass
-        return None
+        return self.scorer._parse_digits(num)
 
     def symbolic_equal(self, a: Any, b: Any) -> bool:
-        def _parse(s: Any) -> Any:
-            for f in [parse_latex, parse_expr]:
-                try:
-                    return f(s)
-                except Exception:
-                    pass
-            return s
-
-        a = _parse(a)
-        b = _parse(b)
-
-        try:
-            if simplify(a - b) == 0:
-                return True
-        except Exception:
-            pass
-
-        try:
-            if isclose(N(a), N(b), abs_tol=1e-3):
-                return True
-        except Exception:
-            pass
-        return False
+        return self.scorer._symbolic_expression_equal(a, b)
 
     def evaluate(self, prediction: Any, label: Any) -> dict:
-        ground_truth_answer = self.extract_answer(label)
-        predicted_answer = self.extract_answer(prediction)
-        solve_rate = 1.0 if self.math_equal(predicted_answer, ground_truth_answer) else 0.0
-        return {"solve_rate": solve_rate}
+        return self.scorer.score(prediction=prediction, label=label)
     
 
 class AFlowMATH(MATH):

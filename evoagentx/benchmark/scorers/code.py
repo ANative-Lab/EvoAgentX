@@ -1,21 +1,23 @@
 """Code-generation scorers (pass@k via sandboxed execution).
 
-Covers HumanEval / MBPP (``CodeScorer``) and LiveCodeBench (``LiveCodeBenchScorer``).
-
-This is a structural skeleton. The execution + pass@k logic currently lives on the
-legacy ``CodingBenchmark`` and should be migrated into the methods marked ``TODO``:
-    - ``check_solution`` / ``handle_special_cases`` / ``_check_evaluation_inputs``
-    - ``compute_pass_at_k``
-along with the ``SUCCESS / FAILED / TIMEOUT`` constants.
+Covers HumanEval / MBPP (``CodeScorer``) and LiveCodeBench
+(``LiveCodeBenchScorer``).
 """
 
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...core.callbacks import timeout, TimeoutException  # noqa: F401  (used after migration)
-from ...utils.sanitize import sanitize  # noqa: F401  (used after migration)
-from ..lcb_utils.evaluation import estimate_pass_at_k
+from ...core.callbacks import timeout, TimeoutException
+from ...core.module_utils import extract_code_blocks
+from ...utils.sanitize import sanitize
+from ..lcb_utils.evaluation import (
+    code_execution_metrics,
+    codegen_metrics,
+    estimate_pass_at_k,
+    test_output_metrics,
+)
+from ..lcb_utils.utils import extract_execution_code, extract_test_output_code
 from .base import Scorer, Metrics
 
 
@@ -34,21 +36,41 @@ class CodeScorer(Scorer):
 
     SUCCESS, FAILED, TIMEOUT = 0, 1, 2
 
-    def __init__(self, k: Union[int, List[int]] = 1, timeout: int = 60, prompt_joiner: str = ""):
+    def __init__(
+        self,
+        k: Union[int, List[int]] = 1,
+        timeout: int = 60,
+        prompt_joiner: str = "",
+        prompt_getter: Optional[Callable[[Any], str]] = None,
+        special_cases_handler: Optional[Callable[[Any, str, str], Tuple[str, str]]] = None,
+        use_entrypoint_as_input: bool = True,
+    ):
         self.k = k
         self.timeout = timeout
         self.prompt_joiner = prompt_joiner
+        self.prompt_getter = prompt_getter
+        self.special_cases_handler = special_cases_handler
+        self.use_entrypoint_as_input = use_entrypoint_as_input
 
     @property
     def metric_keys(self) -> Tuple[str, ...]:
         k_list = self.k if isinstance(self.k, (list, tuple)) else [self.k]
         return tuple(f"pass@{k}" for k in k_list)
 
-    # --- TODO: migrate from CodingBenchmark ------------------------------- #
     def _check_inputs(self, prediction: Any, label: Any) -> Tuple[List[str], List[dict]]:
-        raise NotImplementedError("Migrate CodingBenchmark._check_evaluation_inputs here.")
+        assert isinstance(prediction, (str, list)), (
+            "prediction must be a string or a list of strings, but got {}".format(type(prediction))
+        )
+        assert isinstance(label, (dict, list)), (
+            "label must be a dict or a list of dicts, but got {}".format(type(label))
+        )
+        prediction = [prediction] if isinstance(prediction, str) else prediction
+        label = [label] if isinstance(label, dict) else label
+        return prediction, label
 
     def handle_special_cases(self, task_id: str, solution: str, test: str):
+        if self.special_cases_handler is not None:
+            return self.special_cases_handler(task_id, solution, test)
         return solution, test
 
     def check_solution(
@@ -59,7 +81,40 @@ class CodeScorer(Scorer):
         entry_point: Optional[str] = None,
         use_entrypoint_as_input: bool = True,
     ) -> Tuple[int, str]:
-        raise NotImplementedError("Migrate CodingBenchmark.check_solution here.")
+        solution = sanitize(solution, entrypoint=entry_point)
+
+        try:
+            global_dict = {
+                "math": __import__("math"),
+                "hashlib": __import__("hashlib"),
+                "re": __import__("re"),
+                "List": List,
+                "Dict": Dict,
+                "Tuple": Tuple,
+                "Optional": Optional,
+                "Any": Any,
+            }
+            solution, test = self.handle_special_cases(task_id=task_id, solution=solution, test=test)
+            exec(solution, global_dict)
+            if entry_point not in global_dict:
+                raise ValueError(f"Function {entry_point} not found in the solution code.")
+            exec(test, global_dict)
+            unit_test_func = global_dict["check"]
+            with timeout(seconds=self.timeout):
+                if use_entrypoint_as_input:
+                    unit_test_func(global_dict[entry_point])
+                else:
+                    unit_test_func()
+            result = (self.SUCCESS, "The solution passed the unit test.")
+
+        except TimeoutException:
+            result = (self.TIMEOUT, "Execution timed out.")
+
+        except Exception as e:
+            error_msg = f"An error occurred: {e}\nSolution:\n{solution}\nTest:\n{test}"
+            result = (self.FAILED, error_msg)
+
+        return result
 
     def compute_pass_at_k(self, results: List[bool], k_list: List[int]) -> Dict[str, float]:
         pass_at_k: Dict[str, float] = {}
@@ -70,9 +125,33 @@ class CodeScorer(Scorer):
         return pass_at_k
 
     def score(self, prediction: Any, label: Any) -> Metrics:
-        # prediction: solution code (or list of samples); label: unit test spec(s).
-        # TODO: run check_solution per sample, then compute_pass_at_k.
-        raise NotImplementedError("Wire up CodeScorer.score after migrating CodingBenchmark.")
+        prediction, label = self._check_inputs(prediction, label)
+
+        results = []
+        for solution in prediction:
+            solution_states = []
+            for label_data in label:
+                task_id = label_data["task_id"]
+                prompt = label_data.get("prompt")
+                if prompt is None and self.prompt_getter is not None:
+                    prompt = self.prompt_getter(task_id)
+                if prompt is None:
+                    prompt = ""
+
+                state, message = self.check_solution(
+                    task_id=task_id,
+                    solution=prompt + self.prompt_joiner + solution,
+                    test=label_data["test"],
+                    entry_point=label_data["entry_point"],
+                    use_entrypoint_as_input=self.use_entrypoint_as_input,
+                )
+                if state != self.SUCCESS:
+                    break
+                solution_states.append(state)
+            results.append(len(solution_states) == len(label) and all(state == self.SUCCESS for state in solution_states))
+
+        k_list = [self.k] if isinstance(self.k, int) else self.k
+        return self.compute_pass_at_k(results, k_list)
 
 
 class LiveCodeBenchScorer(Scorer):
@@ -81,12 +160,70 @@ class LiveCodeBenchScorer(Scorer):
     Handles the three scenarios: code_generation / test_output_prediction / code_execution.
     """
 
-    def __init__(self, scenario: str = "code_generation", k=1, timeout: int = 60, num_process: int = 1):
+    VALID_SCENARIO = ["code_generation", "test_output_prediction", "code_execution"]
+
+    def __init__(
+        self,
+        scenario: str = "code_generation",
+        k=1,
+        timeout: int = 60,
+        num_process: int = 1,
+        use_cot_for_execution: bool = False,
+    ):
+        assert scenario in self.VALID_SCENARIO, (
+            f"Invalid scenario: {scenario}. Available choices: {self.VALID_SCENARIO}."
+        )
         self.scenario = scenario
         self.k = k
         self.timeout = timeout
         self.num_process = num_process
+        self.use_cot_for_execution = use_cot_for_execution
+
+    @property
+    def metric_keys(self) -> Tuple[str, ...]:
+        if self.scenario == "code_execution":
+            return ("pass@1",)
+        k_list = self.k if isinstance(self.k, (list, tuple)) else [self.k]
+        return tuple(f"pass@{k}" for k in k_list)
+
+    def _check_inputs(self, prediction: Any, label: Any) -> Tuple[List[str], List[dict]]:
+        assert isinstance(prediction, (str, list)), (
+            "prediction must be a string or a list of strings, but got {}".format(type(prediction))
+        )
+        assert isinstance(label, (dict, list)), (
+            "label must be a dict or a list of dicts, but got {}".format(type(label))
+        )
+        prediction = [prediction] if isinstance(prediction, str) else prediction
+        label = [label] if isinstance(label, dict) else label
+        return prediction, label
 
     def score(self, prediction: Any, label: Any) -> Metrics:
-        # TODO: migrate the scenario-specific lcb_utils metric calls from LiveCodeBench.evaluate.
-        raise NotImplementedError("Wire up LiveCodeBenchScorer.score after migrating LiveCodeBench.")
+        prediction, label = self._check_inputs(prediction, label)
+        k_list = [self.k] if isinstance(self.k, int) else self.k
+
+        if self.scenario == "code_generation":
+            solutions: List[str] = [extract_code_blocks(pred)[0] for pred in prediction]
+            metrics, results, metadatas = codegen_metrics(
+                samples_list=label,
+                generations_list=[solutions],
+                k_list=k_list,
+                num_process_evaluate=self.num_process,
+                timeout=self.timeout,
+            )
+        elif self.scenario == "test_output_prediction":
+            pred_outputs = [extract_test_output_code(pred) for pred in prediction]
+            metrics, results = test_output_metrics(
+                samples=label,
+                generations=[pred_outputs],
+                k_list=k_list,
+            )
+        elif self.scenario == "code_execution":
+            pred_outputs = [extract_execution_code(pred, self.use_cot_for_execution) for pred in prediction]
+            metrics, results = code_execution_metrics(
+                samples=label,
+                generations=[pred_outputs],
+            )
+        else:
+            raise ValueError(f"Invalid scenario: {self.scenario}. Available choices: {self.VALID_SCENARIO}.")
+
+        return {key: float(metrics[key]) for key in self.metric_keys if key in metrics}

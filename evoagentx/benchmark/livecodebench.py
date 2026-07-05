@@ -2,8 +2,8 @@ import os
 # import regex
 from typing import Union, Any, List
 from ..core.logging import logger
-from .benchmark import CodingBenchmark 
-from ..core.module_utils import extract_code_blocks
+from .benchmark import Benchmark
+from .scorers import LiveCodeBenchScorer
 from .lcb_utils.code_generation import (
     CodeGenerationProblem, 
     load_code_generation_dataset
@@ -16,17 +16,11 @@ from .lcb_utils.code_execution import (
     CodeExecutionProblem, 
     load_code_execution_dataset
 )
-from .lcb_utils.evaluation import (
-    codegen_metrics, 
-    test_output_metrics,
-    code_execution_metrics
-)
-from .lcb_utils.utils import extract_test_output_code, extract_execution_code
 
 
 VALID_SCENARIO = ["code_generation", "test_output_prediction", "code_execution"]
 
-class LiveCodeBench(CodingBenchmark):
+class LiveCodeBench(Benchmark):
 
     """Benchmark class for evaluating LLM capabilities on real-world programming tasks.
     
@@ -72,7 +66,15 @@ class LiveCodeBench(CodingBenchmark):
         self.scenario = scenario 
         self.use_cot_for_execution = use_cot_for_execution
         assert scenario in VALID_SCENARIO, f"Invalid scenario: {scenario}. Available choices: {VALID_SCENARIO}." 
-        super().__init__(name=type(self).__name__, path=path, mode=mode, timeout=timeout, **kwargs)
+        self.timeout = timeout
+        super().__init__(name=type(self).__name__, path=path, mode=mode, **kwargs)
+        self.scorer = LiveCodeBenchScorer(
+            scenario=self.scenario,
+            k=self.k,
+            timeout=self.timeout,
+            num_process=self.num_process,
+            use_cot_for_execution=self.use_cot_for_execution,
+        )
     
     def _load_data(self):
         if self.mode == "train" or self.mode == "all":
@@ -120,34 +122,4 @@ class LiveCodeBench(CodingBenchmark):
         Returns:
             dict: The evaluation metrics (pass@k).
         """
-        prediction, label = self._check_evaluation_inputs(prediction, label)
-        k_list = [self.k] if isinstance(self.k, int) else self.k
-
-        if self.scenario == "code_generation":
-            solutions: List[str] = [extract_code_blocks(pred)[0] for pred in prediction]
-            metrics, results, metadatas = codegen_metrics(
-                samples_list=label, # label is already a list 
-                generations_list=[solutions], # for a single example. 
-                k_list=k_list, 
-                num_process_evaluate=self.num_process,
-                timeout=self.timeout
-            )
-            
-        elif self.scenario == "test_output_prediction":
-            pred_outputs = [extract_test_output_code(pred) for pred in prediction]
-            metrics, results = test_output_metrics(
-                samples=label, 
-                generations=[pred_outputs], 
-                k_list=k_list, 
-            )
-        elif self.scenario == "code_execution":
-            pred_outputs = [extract_execution_code(pred, self.use_cot_for_execution) for pred in prediction]
-            metrics, results = code_execution_metrics(
-                samples=label, 
-                generations=[pred_outputs], 
-            )
-        else:
-            raise ValueError(f"Invalid scenario: {self.scenario}. Available choices: {VALID_SCENARIO}.")
-        
-        pass_at_k = {f"pass@{k}": float(metrics[f"pass@{k}"]) for k in k_list}
-        return pass_at_k
+        return self.scorer.score(prediction=prediction, label=label)

@@ -2,7 +2,7 @@ import copy
 import random
 from typing import Any, Iterator, List, Optional, Set, Tuple
 
-from ..benchmark.benchmark import BaseBenchmark
+from ..benchmark.benchmark import Benchmark
 
 Batch = Tuple[List[Any], List[Any], List[Any]]
 VALID_SPLITS = ("train", "dev", "test")
@@ -33,7 +33,7 @@ class DataLoader:
 
     def __init__(
         self,
-        benchmark: BaseBenchmark,
+        benchmark: Benchmark,
         split: str = "test",
         batch_size: int = 1,
         shuffle: bool = False,

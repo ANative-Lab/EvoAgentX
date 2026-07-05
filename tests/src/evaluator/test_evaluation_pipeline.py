@@ -8,12 +8,12 @@ from unittest.mock import patch
 
 import pytest
 
-from evoagentx.benchmark.benchmark import BaseBenchmark
+from evoagentx.benchmark.benchmark import Benchmark
 from evoagentx.evaluators import DataLoader, EvaluationPipeline
 from evoagentx.evaluators.result import EvaluationReport, EvaluationResult, ItemResult
 
 
-class FakeBenchmark(BaseBenchmark):
+class FakeBenchmark(Benchmark):
     """Tiny benchmark: example {id, x, y=2x}; the "correct" prediction is y."""
 
     def __init__(self, n: int = 6):
@@ -55,7 +55,7 @@ def _ids_from_loader(loader):
     return ids
 
 
-def test_base_benchmark_warns_on_duplicate_ids_in_loaded_split():
+def test_benchmark_warns_on_duplicate_ids_in_loaded_split():
     with patch("evoagentx.benchmark.benchmark.logger.warning") as warning:
         DuplicateIdBenchmark()
 
