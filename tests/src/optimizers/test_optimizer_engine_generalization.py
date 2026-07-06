@@ -1153,7 +1153,11 @@ def test_single_arg_evaluate_fn_still_supported(tmp_path):
     assert best.execute()["prompt"] == "improved prompt"
 
 
-def test_no_save_dir_means_no_trial_dirs():
+def test_no_save_dir_means_no_trial_dirs(tmp_path, monkeypatch):
+    # Without save_dir the engine still checkpoints to state.save_dir's default "./";
+    # run from tmp_path so the checkpoint file never lands in the repo root.
+    monkeypatch.chdir(tmp_path)
+
     def evaluate(adapter, context):
         assert context.trial_dir is None
         return {"score": len(adapter.execute()["prompt"])}
