@@ -122,7 +122,7 @@ The `StorageHandler` is tightly integrated with the `RAGEngine` class to support
 ## Configuration
 The `StorageHandler` relies on the `StoreConfig` class (defined in `storages_config.py`) to configure its backends:
 - **`DBConfig`**: Configures relational databases (e.g., SQLite) with settings like `db_name`, `path`, `ip`, and `port`.
-- **`VectorStoreConfig`**: Configures vector databases (e.g., FAISS, Qdrant) with settings like `vector_name`, `dimensions`, `index_type`, `qdrant_url`, and `qdrant_collection_name`.
+- **`VectorStoreConfig`**: Configures vector databases (e.g., FAISS, Qdrant, Milvus) with settings like `vector_name`, `dimensions`, `index_type`, `qdrant_url`, `qdrant_collection_name`, `milvus_uri`, and `milvus_collection_name`.
 - **`GraphStoreConfig`**: Configures graph databases (e.g., Neo4j) with settings上午 like `graph_name`, `uri`, `username`, `password`, and `database`.
 
 The configuration is validated using Pydantic, ensuring robust type checking and default values.
@@ -165,6 +165,28 @@ storage_handler.save_index(index_data)
 index = storage_handler.load_index("corpus1")
 print(index)  # {'corpus_id': 'corpus1', 'content': {...}, 'metadata': {...}}
 ```
+
+To use Milvus instead of FAISS, install the optional dependency and set `vector_name="milvus"`:
+
+```bash
+pip install "evoagentx[milvus]"
+```
+
+```python
+config = StoreConfig(
+    dbConfig=DBConfig(db_name="sqlite", path="data/storage.db"),
+    vectorConfig=VectorStoreConfig(
+        vector_name="milvus",
+        dimensions=1536,
+        milvus_uri="./data/evoagentx_milvus.db",
+        milvus_collection_name="evoagentx_vectors",
+        milvus_metric_type="IP",
+    ),
+    path="data/index_cache"
+)
+```
+
+`milvus_uri` can point to a Milvus Lite `.db` file, a self-hosted Milvus endpoint such as `http://localhost:19530`, or a Zilliz Cloud endpoint when paired with `milvus_token`.
 
 ## Notes
 - The `load_memory` and `save_memory` methods are not yet fully implemented and will be developed alongside `LongTermMemory`.

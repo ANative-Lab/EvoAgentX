@@ -26,6 +26,13 @@ class VectorStoreFactory:
         #         raise ValueError("Qdrant requires a valid URL")
         #     client = QdrantClient(url=qdrant_url, api_key=qdrant_api_key)
         #     vector_store = QdrantVectorStore(client=client, collection_name=collection_name)
+        elif store_type == VectorStoreType.MILVUS:
+            dimensions = store_config.get("dimensions")
+            if not dimensions or not isinstance(dimensions, int):
+                raise ValueError("Milvus requires a valid dimension")
+            from .milvus import MilvusVectorStoreWrapper
+
+            vector_store = MilvusVectorStoreWrapper(**store_config)
         else:
             raise ValueError(f"Unsupported vector store type: {store_type}")
         logger.info(f"Created vector store: {store_type}")
