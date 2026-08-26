@@ -1,10 +1,13 @@
+import threading
 import unittest
 from unittest.mock import Mock, patch
-from evoagentx.evaluators.evaluator import Evaluator
+from evoagentx.evaluators.evaluator import Evaluator, _agents_with_fresh_short_term_memory
 from evoagentx.benchmark.benchmark import Benchmark
 from evoagentx.workflow.workflow_graph import WorkFlowGraph
 from evoagentx.workflow.action_graph import ActionGraph
+from evoagentx.agents.agent import Agent
 from evoagentx.agents.agent_manager import AgentManager
+from evoagentx.core.message import Message, MessageType
 from evoagentx.models.base_model import BaseLLM
 
 class TestEvaluator(unittest.TestCase):
@@ -187,6 +190,58 @@ class TestEvaluator(unittest.TestCase):
         
         self.assertEqual(results, {})
         self.assertEqual(len(self.evaluator.get_all_evaluation_records()), 0)
+
+class TestEvaluatorConcurrentAgentMemoryIsolation(unittest.TestCase):
+
+    def test_agents_with_fresh_short_term_memory_clones_memory_only(self):
+        # Unit-tests the helper shared by _create_new_agent_manager (thread
+        # path) and _async_execute_workflow_graph (async path): each clone
+        # must get its own ShortTermMemory while everything else is shared.
+        agent = Agent(name="worker", description="test agent", is_human=True)
+
+        clone_one, clone_two = _agents_with_fresh_short_term_memory([agent, agent])
+
+        self.assertIsNot(clone_one.short_term_memory, agent.short_term_memory)
+        self.assertIsNot(clone_two.short_term_memory, clone_one.short_term_memory)
+        self.assertEqual(clone_one.name, agent.name)
+        self.assertIs(clone_one.llm, agent.llm)
+
+    def test_create_new_agent_manager_isolates_short_term_memory_across_threads(self):
+        # Reproduces the reported bug: two "independent" per-thread
+        # AgentManagers created by _create_new_agent_manager must not let one
+        # example's messages leak into another's short_term_memory.
+        shared_agent = Agent(name="worker", description="test agent", is_human=True)
+        agent_manager = AgentManager(agents=[shared_agent])
+        evaluator = Evaluator(llm=Mock(spec=BaseLLM), num_workers=2, agent_manager=agent_manager)
+
+        manager_a = evaluator._create_new_agent_manager()
+        manager_b = evaluator._create_new_agent_manager()
+        self.assertIsNot(manager_a.agents[0], manager_b.agents[0])
+
+        barrier = threading.Barrier(2)
+        results = {}
+
+        def run_example(manager, example_id):
+            agent = manager.agents[0]
+            barrier.wait()
+            for i in range(5):
+                agent.short_term_memory.add_message(
+                    Message(content=f"example-{example_id}-msg-{i}", msg_type=MessageType.INPUT)
+                )
+            results[example_id] = [m.content for m in agent.short_term_memory.get(n=5)]
+
+        threads = [
+            threading.Thread(target=run_example, args=(manager_a, "A")),
+            threading.Thread(target=run_example, args=(manager_b, "B")),
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        self.assertTrue(all(c.startswith("example-A-") for c in results["A"]))
+        self.assertTrue(all(c.startswith("example-B-") for c in results["B"]))
+
 
 if __name__ == '__main__':
     unittest.main()

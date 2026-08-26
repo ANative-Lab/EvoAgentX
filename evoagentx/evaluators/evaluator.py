@@ -14,7 +14,20 @@ from ..benchmark.benchmark import Benchmark
 from ..workflow.workflow import WorkFlow
 from ..workflow.action_graph import ActionGraph
 from ..workflow.workflow_graph import WorkFlowGraph
+from ..agents.agent import Agent
 from ..agents.agent_manager import AgentManager
+from ..memory.memory import ShortTermMemory
+
+
+def _agents_with_fresh_short_term_memory(agents: List[Agent]) -> List[Agent]:
+    """Clone each agent with its own ShortTermMemory, sharing everything else.
+
+    ``AgentManager`` copies (``Evaluator._create_new_agent_manager``, the async
+    per-task manager below) keep the same ``Agent`` instances across concurrent
+    examples, so ``Agent.short_term_memory``, mutated on every execution,
+    is shared with no lock and one example's messages leak into another's.
+    """
+    return [agent.model_copy(update={"short_term_memory": ShortTermMemory()}) for agent in agents]
 
 
 class Evaluator:
@@ -241,8 +254,12 @@ class Evaluator:
         """Create a new agent manager with the same configuration but new locks"""
         if self.agent_manager is None:
             return None
-        # Create a new agent manager
-        new_manager = AgentManager(agents=self.agent_manager.agents, storage_handler=self.agent_manager.storage_handler)
+        # Create a new agent manager, with its own agent copies so concurrent
+        # examples don't share short_term_memory (see _agents_with_fresh_short_term_memory)
+        new_manager = AgentManager(
+            agents=_agents_with_fresh_short_term_memory(self.agent_manager.agents),
+            storage_handler=self.agent_manager.storage_handler
+        )
         return new_manager
 
     def _get_thread_agent_manager(self) -> AgentManager:
@@ -502,9 +519,10 @@ class Evaluator:
         graph_copy = WorkFlowGraph(goal=graph.goal, graph=graph)
         graph_copy.reset_graph() # reset the status of all nodes to pending
         
-        # Make a local copy of agent_manager for thread-safety in async context
+        # Make a local copy of agent_manager for thread-safety in async context,
+        # with fresh per-agent short_term_memory (_agents_with_fresh_short_term_memory)
         local_agent_manager = AgentManager(
-            agents=self.agent_manager.agents,
+            agents=_agents_with_fresh_short_term_memory(self.agent_manager.agents),
             storage_handler=self.agent_manager.storage_handler
         )
         
