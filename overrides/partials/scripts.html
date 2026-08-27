@@ -1,0 +1,71 @@
+<script>
+  function attachLangSwitch() {
+    const langLinks = document.querySelectorAll('.md-language__link');
+
+    langLinks.forEach(link => {
+      link.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+
+        const targetLang = this.getAttribute('hreflang');
+        const currentPath = window.location.pathname;
+
+        const isZh = currentPath.startsWith('/zh');
+        const currentLang = isZh ? 'zh' : 'en';
+
+        // ✅  
+        if (targetLang === currentLang) return;
+
+        try {
+          sessionStorage.setItem('scrollY', window.scrollY);
+          document.body.style.opacity = '0.6';
+          document.body.style.transition = 'opacity 0.3s';
+
+          let newPath = currentPath;
+
+          // ✅  
+          if (currentPath === '/' && targetLang === 'zh') {
+            newPath = '/zh/';
+          } else if ((currentPath === '/zh' || currentPath === '/zh/') && targetLang === 'en') {
+            newPath = '/';
+          } else if (targetLang === 'zh') {
+            newPath = '/zh' + (isZh ? currentPath.substring(3) : currentPath);
+          } else {
+            newPath = currentPath.replace(/^\/[a-z]{2}/, '') || '/';
+          }
+
+          // ✅  
+          setTimeout(() => {
+            window.location.href = newPath;
+          }, 200);
+        } catch (error) {
+          console.error('language switch error:', error);
+          document.body.style.opacity = '1';
+        }
+      });
+    });
+  }
+
+  function restoreScrollPosition() {
+    try {
+      const y = sessionStorage.getItem('scrollY');
+      if (y) {
+        window.scrollTo({ top: parseInt(y), behavior: 'auto' });
+        sessionStorage.removeItem('scrollY');
+      }
+      document.body.style.opacity = '1';
+    } catch (error) {
+      console.error('keep scroll position error:', error);
+    }
+  }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    attachLangSwitch();
+    restoreScrollPosition();
+  });
+
+  document$.subscribe(() => {
+    attachLangSwitch();
+    restoreScrollPosition();
+  });
+</script>

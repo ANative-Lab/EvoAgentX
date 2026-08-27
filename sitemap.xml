@@ -1,0 +1,597 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/index.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/index.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/index.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/installation.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/installation.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/installation.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/quickstart.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/quickstart.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/quickstart.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/api/actions.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/api/actions.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/api/actions.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/api/agents.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/api/agents.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/api/agents.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/api/benchmark.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/api/benchmark.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/api/benchmark.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/api/core.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/api/core.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/api/core.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/api/evaluators.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/api/evaluators.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/api/evaluators.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/api/memory.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/api/memory.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/api/memory.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/api/models.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/api/models.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/api/models.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/api/optimizers.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/api/optimizers.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/api/optimizers.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/api/storages.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/api/storages.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/api/storages.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/api/tools.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/api/tools.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/api/tools.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/api/workflow.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/api/workflow.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/api/workflow.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/modules/action_graph.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/action_graph.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/action_graph.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/modules/agent.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/agent.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/agent.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/modules/benchmark.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/benchmark.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/benchmark.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/modules/customize_agent.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/customize_agent.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/customize_agent.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/modules/evaluator.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/evaluator.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/evaluator.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/modules/image_tools.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/image_tools.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/image_tools.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/modules/llm.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/llm.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/llm.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/modules/multi_agent_debate.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/multi_agent_debate.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/multi_agent_debate.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/modules/prompt_template.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/prompt_template.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/prompt_template.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/modules/rag.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/rag.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/rag.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/modules/storages.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/storages.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/storages.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/modules/workflow_graph.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/workflow_graph.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/workflow_graph.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/tutorial/aflow_optimizer.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/aflow_optimizer.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/aflow_optimizer.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/tutorial/alita_agent.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/alita_agent.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/alita_agent.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/tutorial/benchmark_and_evaluation.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/benchmark_and_evaluation.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/benchmark_and_evaluation.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/tutorial/colab_notebooks.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/colab_notebooks.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/colab_notebooks.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/tutorial/evoprompt_optimizer.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/evoprompt_optimizer.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/evoprompt_optimizer.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/tutorial/first_agent.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/first_agent.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/first_agent.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/tutorial/first_workflow.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/first_workflow.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/first_workflow.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/tutorial/hitl.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/hitl.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/hitl.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/tutorial/image_tools.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/image_tools.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/image_tools.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/tutorial/mcp.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/mcp.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/mcp.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/tutorial/multi_agent_debate.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/multi_agent_debate.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/multi_agent_debate.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/tutorial/rag.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/rag.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/rag.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/tutorial/sew_optimizer.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/sew_optimizer.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/sew_optimizer.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/tutorial/textgrad_optimizer.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/textgrad_optimizer.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/textgrad_optimizer.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/tutorial/tools.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/tools.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/tools.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/tutorial/tools/Gmail_api_setup.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/tools/Gmail_api_setup.html"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/tools/Gmail_api_setup.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/index.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/index.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/index.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/installation.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/installation.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/installation.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/quickstart.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/quickstart.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/quickstart.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/api/actions.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/api/actions.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/api/actions.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/api/agents.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/api/agents.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/api/agents.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/api/benchmark.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/api/benchmark.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/api/benchmark.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/api/core.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/api/core.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/api/core.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/api/evaluators.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/api/evaluators.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/api/evaluators.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/api/memory.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/api/memory.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/api/memory.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/api/models.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/api/models.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/api/models.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/api/optimizers.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/api/optimizers.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/api/optimizers.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/api/storages.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/api/storages.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/api/storages.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/api/tools.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/api/tools.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/api/tools.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/api/workflow.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/api/workflow.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/api/workflow.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/modules/action_graph.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/action_graph.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/action_graph.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/modules/agent.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/agent.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/agent.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/modules/benchmark.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/benchmark.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/benchmark.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/modules/customize_agent.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/customize_agent.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/customize_agent.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/modules/evaluator.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/evaluator.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/evaluator.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/modules/image_tools.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/image_tools.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/image_tools.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/modules/llm.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/llm.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/llm.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/modules/multi_agent_debate.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/multi_agent_debate.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/multi_agent_debate.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/modules/prompt_template.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/prompt_template.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/prompt_template.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/modules/rag.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/rag.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/rag.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/modules/storages.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/storages.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/storages.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/modules/workflow_graph.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/modules/workflow_graph.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/modules/workflow_graph.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/tutorial/aflow_optimizer.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/aflow_optimizer.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/aflow_optimizer.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/tutorial/alita_agent.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/alita_agent.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/alita_agent.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/tutorial/benchmark_and_evaluation.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/benchmark_and_evaluation.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/benchmark_and_evaluation.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/tutorial/colab_notebooks.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/colab_notebooks.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/colab_notebooks.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/tutorial/evoprompt_optimizer.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/evoprompt_optimizer.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/evoprompt_optimizer.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/tutorial/first_agent.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/first_agent.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/first_agent.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/tutorial/first_workflow.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/first_workflow.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/first_workflow.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/tutorial/hitl.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/hitl.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/hitl.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/tutorial/image_tools.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/image_tools.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/image_tools.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/tutorial/mcp.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/mcp.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/mcp.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/tutorial/multi_agent_debate.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/multi_agent_debate.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/multi_agent_debate.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/tutorial/rag.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/rag.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/rag.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/tutorial/sew_optimizer.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/sew_optimizer.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/sew_optimizer.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/tutorial/textgrad_optimizer.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/textgrad_optimizer.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/textgrad_optimizer.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/tutorial/tools.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/tools.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/tools.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/tutorial/tools/Gmail_api_setup.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/tools/Gmail_api_setup.html"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://evoagentx.github.io/EvoAgentX/tutorial/tools/Gmail_api_setup.html"/>
+    </url>
+    <url>
+        <loc>https://evoagentx.github.io/EvoAgentX/zh/tutorial/evoprompt_optimizer_zh.html</loc>
+        <lastmod>2026-08-27</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://evoagentx.github.io/EvoAgentX/zh/tutorial/evoprompt_optimizer_zh.html"/>
+    </url>
+</urlset>

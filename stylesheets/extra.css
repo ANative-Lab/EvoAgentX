@@ -1,0 +1,134 @@
+/* .md-nav__title {
+    font-weight: bold;
+    color: black;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+}
+
+
+.md-nav__item--section {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+}
+
+.md-nav__list > .md-nav__item--section:last-child {
+  border-bottom: none;
+}
+ */
+
+
+ :root {
+  --base-border-radius: 0.5rem;
+}
+
+.md-search__form {
+  border-radius: var(--base-border-radius);
+  overflow: hidden; /* 保证边角不会溢出 */
+}
+
+[data-md-toggle="search"]:checked ~ .md-header .md-search__form {
+  border-top-left-radius: var(--base-border-radius);
+  border-top-right-radius: var(--base-border-radius);
+}
+
+[dir="ltr"] .md-search__output {
+  border-bottom-left-radius: var(--base-border-radius);
+  border-bottom-right-radius: var(--base-border-radius);
+}
+
+.md-nav__link--active {
+  color: #1a73e8 !important;     /* 改为 Google 蓝 */
+  font-weight: 600;
+}
+
+
+.md-nav__item--active > .md-nav__link::before {
+  background-color: #1a73e8;
+}
+
+.md-nav__link--active.md-nav__link--active--exact {
+  color: #1a73e8;
+  font-weight: 600;
+}
+
+ 
+ .md-typeset h1 ~ h4 {
+  font-weight: 600;      
+  color: #000;           
+}
+
+ .md-nav__title {
+  font-weight: bold;
+  color: black;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+}
+
+:root {
+  font-size: 21px;
+}
+
+.md-nav__item--section {
+border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+margin-bottom: 8px;
+padding-bottom: 8px;
+}
+
+.md-nav__list > .md-nav__item--section:last-child {
+border-bottom: none;
+}
+
+
+/* 调整 mkdocstrings / pygments 代码块字体大小 */
+.md-typeset pre > code {
+  font-size:16px;        /* 可调大小 */
+  line-height: 1.2;
+  font-family: "Fira Code", "Courier New", monospace;
+}
+
+.md-content .md-code__content {
+  border-radius: 8px;
+}
+
+.md-clipboard.md-icon {
+  color: #9e9e9e;
+}
+
+.md-content a:hover {
+  text-decoration: underline;
+}
+
+/* .md-typeset .admonition,
+.md-typeset details {
+    border: none;
+    border-radius: 8px;
+    overflow: hidden;
+} */
+
+
+/* .md-tabs {
+  background-color: teal;    
+  color: #e4e4e7;
+  border-bottom: none;
+} */
+
+
+/* logo size */
+.md-header__button.md-logo {
+  padding: 0.2rem;  
+}
+
+.md-header__button.md-logo img {
+  height: 2.2rem;  /* logo hight */
+  width: auto;     
+}
+
+/* mobile logo size */
+@media screen and (max-width: 76.1875em) {
+  .md-header__button.md-logo img {
+    height: 1.8rem; 
+  }
+}
