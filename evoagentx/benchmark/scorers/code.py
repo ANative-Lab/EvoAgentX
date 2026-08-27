@@ -4,6 +4,7 @@ Covers HumanEval / MBPP (``CodeScorer``) and LiveCodeBench
 (``LiveCodeBenchScorer``).
 """
 
+import asyncio
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -11,6 +12,7 @@ import numpy as np
 from ...core.callbacks import timeout, TimeoutException
 from ...core.module_utils import extract_code_blocks
 from ...utils.sanitize import sanitize
+from ...optimizers.core.scoring import Scorer, ScoreRequest, ScoreResult, Metrics
 from ..lcb_utils.evaluation import (
     code_execution_metrics,
     codegen_metrics,
@@ -18,7 +20,6 @@ from ..lcb_utils.evaluation import (
     test_output_metrics,
 )
 from ..lcb_utils.utils import extract_execution_code, extract_test_output_code
-from .base import Scorer, Metrics
 
 
 class CodeScorer(Scorer):
@@ -124,7 +125,10 @@ class CodeScorer(Scorer):
                 pass_at_k[f"pass@{k}"] = float(estimate_pass_at_k(np.array([n]), np.array([c]), k)[0])
         return pass_at_k
 
-    def score(self, prediction: Any, label: Any) -> Metrics:
+    async def score(self, req: ScoreRequest) -> ScoreResult:
+        return ScoreResult(metrics=await asyncio.to_thread(self._compute, req.prediction, req.reference))
+
+    def _compute(self, prediction: Any, label: Any) -> Metrics:
         prediction, label = self._check_inputs(prediction, label)
 
         results = []
@@ -197,7 +201,10 @@ class LiveCodeBenchScorer(Scorer):
         label = [label] if isinstance(label, dict) else label
         return prediction, label
 
-    def score(self, prediction: Any, label: Any) -> Metrics:
+    async def score(self, req: ScoreRequest) -> ScoreResult:
+        return ScoreResult(metrics=await asyncio.to_thread(self._compute, req.prediction, req.reference))
+
+    def _compute(self, prediction: Any, label: Any) -> Metrics:
         prediction, label = self._check_inputs(prediction, label)
         k_list = [self.k] if isinstance(self.k, int) else self.k
 

@@ -3,6 +3,7 @@
 Covers GSM8K (numeric: last-number match) and MATH (symbolic: sympy equality).
 """
 
+import asyncio
 from math import isclose
 from typing import Any, Tuple
 
@@ -11,7 +12,7 @@ from sympy import N, simplify
 from sympy.parsing.latex import parse_latex
 from sympy.parsing.sympy_parser import parse_expr
 
-from .base import Scorer, Metrics
+from ...optimizers.core.scoring import Scorer, ScoreRequest, ScoreResult, Metrics
 
 
 class MathScorer(Scorer):
@@ -120,7 +121,10 @@ class MathScorer(Scorer):
             pass
         return False
 
-    def score(self, prediction: Any, label: Any) -> Metrics:
+    async def score(self, req: ScoreRequest) -> ScoreResult:
+        return ScoreResult(metrics=await asyncio.to_thread(self._compute, req.prediction, req.reference))
+
+    def _compute(self, prediction: Any, label: Any) -> Metrics:
         if self.mode == "numeric":
             pred = self._extract_numeric(prediction)
             gold = self._extract_numeric(label)

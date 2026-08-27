@@ -7,7 +7,7 @@ labels and an em-only mode (BBH).
 from typing import Any, List, Tuple
 
 from ..measures import exact_match_score, ems, f1_score, acc_score
-from .base import Scorer, Metrics
+from ...optimizers.core.scoring import Scorer, ScoreRequest, ScoreResult, Metrics
 
 
 class QAScorer(Scorer):
@@ -39,7 +39,10 @@ class QAScorer(Scorer):
     def metric_keys(self) -> Tuple[str, ...]:
         return tuple(self.metrics)
 
-    def score(self, prediction: Any, label: Any) -> Metrics:
+    async def score(self, req: ScoreRequest) -> ScoreResult:
+        return ScoreResult(metrics=self._compute(req.prediction, req.reference))
+
+    def _compute(self, prediction: Any, label: Any) -> Metrics:
         if self.normalize_fn is not None:
             prediction, label = self.normalize_fn(prediction), self.normalize_fn(label)
 
