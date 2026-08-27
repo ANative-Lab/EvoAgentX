@@ -75,6 +75,24 @@ print("RAGEngine is ready to go!")
   - `RetrievalConfig`: Retrieves the top 3 most similar chunks with a similarity score above 0.3.
 - **Initialization**: We create the `RAGEngine` instance, ready to process documents.
 
+To use Milvus instead of FAISS, install the optional dependency and replace the vector store configuration:
+
+```bash
+pip install "evoagentx[milvus]"
+```
+
+```python
+vectorConfig=VectorStoreConfig(
+    vector_name="milvus",
+    dimensions=1536,
+    milvus_uri="./data/evoagentx_milvus.db",
+    milvus_collection_name="rag_tutorial_vectors",
+    milvus_metric_type="IP",
+)
+```
+
+Use a Milvus Lite `.db` path for local development, or set `milvus_uri` and `milvus_token` for Milvus server or Zilliz Cloud.
+
 For more details on configuration, see the [RAGEngine documentation](../modules/rag.md).
 
 ## 2. Indexing and Querying Documents

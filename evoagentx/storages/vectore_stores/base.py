@@ -6,6 +6,7 @@ from llama_index.core.vector_stores.types import BasePydanticVectorStore
 
 class VectorStoreType(str, Enum):
     FAISS = "faiss"
+    MILVUS = "milvus"
 
 
 class VectorStoreBase(ABC):

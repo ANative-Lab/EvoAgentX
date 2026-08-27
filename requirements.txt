@@ -40,6 +40,7 @@ neo4j
 ollama
 docx2txt
 python-pptx
+pymilvus[milvus-lite]>=3.0.0
 
 # tools
 docker>=6.1.2

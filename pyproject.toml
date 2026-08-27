@@ -61,6 +61,9 @@ rag = [
     "docx2txt",
     "python-pptx"
 ]
+milvus = [
+    "pymilvus[milvus-lite]>=3.0.0"
+]
 tools = [
     "docker>=6.1.2",
     "googlesearch-python",
@@ -159,7 +162,8 @@ all = [
     "ujson>=5.9.0",
     "sympy",
     "antlr4-python3-runtime==4.11",
-    "matplotlib>=3.10.0"
+    "matplotlib>=3.10.0",
+    "pymilvus[milvus-lite]>=3.0.0"
 ]
 
 [project.urls]
