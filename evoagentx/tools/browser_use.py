@@ -40,9 +40,10 @@ class BrowserUseBase(BaseModule):
         
         try:
             # Try importing from the standard browser-use package (Python 3.11+)
-            from browser_use import Agent
+            from browser_use import Agent, BrowserProfile
             from browser_use.llm import ChatOpenAI, ChatAnthropic
             self.Agent = Agent
+            self.BrowserProfile = BrowserProfile
             self.ChatOpenAI = ChatOpenAI
             self.ChatAnthropic = ChatAnthropic
         except ImportError:
@@ -51,6 +52,7 @@ class BrowserUseBase(BaseModule):
                 from browser_use_py310x import Agent
                 from browser_use_py310x.llm import ChatOpenAI, ChatAnthropic
                 self.Agent = Agent
+                self.BrowserProfile = None
                 self.ChatOpenAI = ChatOpenAI
                 self.ChatAnthropic = ChatAnthropic
             except ImportError as e:
@@ -61,15 +63,15 @@ class BrowserUseBase(BaseModule):
         self.api_key = api_key
         self.browser_type = browser_type
         self.headless = headless
+
+        if self.BrowserProfile is not None and browser_type != "chromium":
+            raise ValueError("browser-use supports Chromium only; set browser_type='chromium'")
         
         # Initialize LLM based on model type
         self.llm = self._setup_llm()
         
         # Browser configuration
-        self.browser_config = {
-            "browser_type": browser_type,
-            "headless": headless
-        }
+        self.browser_config = {"browser_type": browser_type, "headless": headless}
     
     def _setup_llm(self):
         """Setup the appropriate LLM based on model name."""
@@ -109,11 +111,17 @@ class BrowserUseBase(BaseModule):
         """
         try:
             # Create agent with configuration
-            agent = self.Agent(
-                task=task,
-                llm=self.llm,
-                **self.browser_config
-            )
+            agent_kwargs = {"task": task, "llm": self.llm}
+            if self.BrowserProfile is not None:
+                # Current browser-use configures the browser through BrowserProfile.
+                # Extra Agent kwargs are accepted but ignored, which previously made
+                # headless=True silently launch a visible browser.
+                agent_kwargs["browser_profile"] = self.BrowserProfile(headless=self.headless)
+            else:
+                # Keep the legacy Python 3.10 compatibility package on its old API.
+                agent_kwargs.update(self.browser_config)
+
+            agent = self.Agent(**agent_kwargs)
             
             # Execute the task
             logger.info(f"Executing browser task: {task}")
