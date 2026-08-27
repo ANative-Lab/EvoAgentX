@@ -464,7 +464,8 @@ class TextGradOptimizer(BaseModule):
         """
 
         task_id = label["task_id"]
-        prompt = dataset.get_example_by_id(task_id)["prompt"]
+        # example ids are strings; MBPP's raw task_id is an int
+        prompt = dataset.get_example_by_id(str(task_id))["prompt"]
         test = label["test"]
         entry_point = label["entry_point"]
 

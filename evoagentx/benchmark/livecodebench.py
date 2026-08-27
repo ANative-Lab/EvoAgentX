@@ -105,8 +105,19 @@ class LiveCodeBench(Benchmark):
 
         return data 
     
-    def _get_id(self, example: Union[CodeGenerationProblem, TestOutputPredictionProblem]) -> str:
-        return example.question_id  
+    def _get_id(self, example: Union[CodeGenerationProblem, TestOutputPredictionProblem, CodeExecutionProblem]) -> str:
+        """Return the stable unique id of an example, per scenario.
+
+        ``question_id`` alone is only unique in the code generation scenario:
+        test output prediction carries several tests per question, and code
+        execution several execution instances per question (with an int
+        ``question_id`` and its own unique string ``id``).
+        """
+        if self.scenario == "code_execution":
+            return str(example.id)
+        if self.scenario == "test_output_prediction":
+            return f"{example.question_id}-{example.test_id}"
+        return str(example.question_id)
     
     def _get_label(self, example: Union[CodeGenerationProblem, TestOutputPredictionProblem]) -> dict:
         return example.get_evaluation_sample()

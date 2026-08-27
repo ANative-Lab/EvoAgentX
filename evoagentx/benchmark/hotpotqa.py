@@ -14,7 +14,9 @@ VALIDE_RAW_HOTPOTQA_FILES = [file for file in list(HOTPOTQA_FILES_MAP.values()) 
 def download_raw_hotpotqa_data(name: str, save_folder: str):
 
     assert name in VALIDE_RAW_HOTPOTQA_FILES, f"'{name}' is an invalid hotpotqa file name. Available file names: {VALIDE_RAW_HOTPOTQA_FILES}"
-    url = f"http://curtis.ml.cmu.edu/datasets/hotpot/{name}"
+    # The original curtis.ml.cmu.edu host is no longer reliably reachable.
+    # This public mirror serves byte-identical copies of the official files.
+    url = f"https://huggingface.co/datasets/namlh2004/hotpotqa/resolve/main/{name}?download=true"
     typ = "train" if "train" in name else "dev"
     logger.info(f"Downloading HotPotQA {typ} data from: {url}")
     download_file(url=url, save_file=os.path.join(save_folder, name))
@@ -64,7 +66,9 @@ class HotPotQA(Benchmark):
         return example["answer"]
     
     def _get_id(self, example: Any) -> Any:
-        return example["_id"]
+        # Mostly 24-hex strings, but the AFlow export carries a handful of int
+        # _id values, so normalise to str.
+        return str(example["_id"])
     
     def evaluate(self, prediction: Any, label: Any) -> dict:
         return self.scorer.score(prediction=prediction, label=label)

@@ -113,7 +113,7 @@ class MBPP(Benchmark):
             k=self.k,
             timeout=self.timeout,
             prompt_joiner="\n",
-            prompt_getter=lambda task_id: self.get_example_by_id(task_id)["prompt"],
+            prompt_getter=lambda task_id: self.get_example_by_id(str(task_id))["prompt"],
         )
     
     def _load_data(self):
@@ -131,7 +131,8 @@ class MBPP(Benchmark):
             self._test_data = load_mbpp_data(data_path)
     
     def _get_id(self, example: Any) -> Any:
-        return example["task_id"]
+        # task_id is an int in the raw data; example ids must be strings.
+        return str(example["task_id"])
 
     def _get_label(self, example: Any) -> Any:
         # return the unit test code
@@ -170,7 +171,7 @@ class AFlowMBPP(MBPP):
             k=self.k,
             timeout=self.timeout,
             prompt_joiner="\n",
-            prompt_getter=lambda task_id: self.get_example_by_id(task_id)["prompt"],
+            prompt_getter=lambda task_id: self.get_example_by_id(str(task_id))["prompt"],
             use_entrypoint_as_input=False,
         )
 

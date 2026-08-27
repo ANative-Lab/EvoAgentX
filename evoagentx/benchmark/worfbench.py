@@ -1,6 +1,5 @@
 import os
 import json
-import random
 from typing import Any, Dict, Callable, List
 from .benchmark import Benchmark
 from .measures import exact_match_score, f1_score, acc_score
@@ -86,8 +85,8 @@ class WorfBench(Benchmark):
         "level": str
     }
     """
-    def __init__(self, path: str = None, mode: str = "test", **kwargs):
-        path = os.path.expanduser(path or "~/.worfbench/data")
+    def __init__(self, path: str = None, mode: str = "all", **kwargs):
+        path = os.path.expanduser(path or "~/.evoagentx/data/worfbench")
         super().__init__(name=type(self).__name__, path=path, mode=mode, **kwargs)
 
     def _load_data_from_file(self, file_name: str) -> Dict:
@@ -104,27 +103,26 @@ class WorfBench(Benchmark):
         if data is None:
             logger.error(f"Failed to load data from {file_path}")
             return None
+        # The raw train split (unlabelled chat/SFT data) has no "id" field,
+        # unlike the test split. Synthesize a stable id from the file's type
+        # and position for any example that doesn't already have one.
+        typ = "train" if "train" in file_name else "test"
+        for i, example in enumerate(data):
+            if not example.get("id"):
+                example["id"] = f"{typ}-{i+1}"
         return data
 
     def _load_data(self) -> None:
-        if self.mode in ["train", "dev"]:
+        if self.mode == "train" or self.mode == "all":
             self._train_data = self._load_data_from_file(file_name=WORFBENCH_FILES_MAP["train"])
-            if self.mode == "dev":
-                if self._train_data:
-                    random.seed(42)
-                    keys = list(self._train_data.keys())
-                    n_dev = len(self._train_data[keys[0]]) // 10 or 1
-                    indices = list(range(len(self._train_data[keys[0]])))
-                    random.shuffle(indices)
-                    self._train_data = {k: [v[i] for i in indices[:n_dev]] for k, v in self._train_data.items()}
-        if self.mode == "test":
+        if self.mode == "test" or self.mode == "all":
             self._test_data = self._load_data_from_file(file_name=WORFBENCH_FILES_MAP["test"])
 
     def _get_label(self, example: Dict) -> Any:
         return example.get("expected_output", "")
 
     def _get_id(self, example: Dict) -> Any:
-        return example.get("id", "")
+        return example["id"]
 
     def evaluate(self, prediction: Any, label: Any) -> Dict:
         if isinstance(prediction, list) and isinstance(label, list):

@@ -9,7 +9,6 @@ designed to test reasoning capabilities of language models.
 import os
 import random  
 import numpy as np
-import torch
 from typing import Any, List, Optional
 
 from .benchmark import Benchmark
@@ -60,8 +59,6 @@ def set_seed(seed: int):
     """
     random.seed(seed)
     np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
 
 class BIGBenchHard(Benchmark):
     """
@@ -133,7 +130,12 @@ class BIGBenchHard(Benchmark):
             
         logger.info(f"Loading BIGBenchHard data from {file_path}...")
         data = load_json(path=file_path, type="json")
-        return data.get("examples", [])
+        examples = data.get("examples", [])
+        # The raw BIG-Bench Hard files carry only "input" / "target", so ids are
+        # derived from the position in the task file. They are assigned before
+        # the dev/test split, so an id keeps identifying the same example
+        # whatever dev_sample_num is set to.
+        return [{"id": str(i), **example} for i, example in enumerate(examples)]
 
     def _load_data(self):
         """
@@ -204,15 +206,16 @@ class BIGBenchHard(Benchmark):
         """
         Extract the unique identifier from an example.
         
-        BIGBenchHard examples don't have explicit IDs, so we use input text as identifier.
+        BIGBenchHard examples carry no id of their own; ``_load_data_from_file``
+        stamps one derived from the example's position in the task file.
         
         Args:
             example: The benchmark example
             
         Returns:
-            The input text as a unique identifier
+            The example id, a string
         """
-        return example.get("input", None)
+        return example["id"]
     
     def evaluate(self, prediction: Any, label: Any) -> dict:
         """

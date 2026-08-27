@@ -120,7 +120,8 @@ class RealMMRAG(Benchmark):
         return example["answer"]
     
     def _get_id(self, example: Any) -> Any:
-        return example["id"]
+        # The upstream dataset numbers examples with an int id.
+        return str(example["id"])
     
     def evaluate(self, prediction: Any, label: Any) -> dict:
         return self.scorer.score(prediction=prediction, label=label)

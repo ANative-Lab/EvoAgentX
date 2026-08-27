@@ -129,25 +129,28 @@ class AFlowMATH(MATH):
         path = os.path.expanduser(path or "~/.evoagentx/data/aflow/math")
         super().__init__(path=path, mode=mode, **kwargs)
 
-    def _load_data_from_file(self, file_name: str):
+    def _load_data_from_file(self, file_name: str, split: str):
         if file_name is None:
             return None
         file_path = os.path.join(self.path, file_name)
         if not os.path.exists(file_path):
             download_aflow_benchmark_data(dataset="math", save_folder=self.path)
-        return load_json(path=file_path, type="jsonl")
+        data = load_json(path=file_path, type="jsonl")
+        # The AFlow MATH files carry no id field, unlike the raw MATH data, so
+        # ids are derived from the position within the split.
+        return [{"id": f"{split}-{i+1}", **example} for i, example in enumerate(data)]
 
     def _load_data(self):
 
         if self.mode == "train" or self.mode == "all":
             logger.info(f"Loading train data from {AFLOW_DATASET_FILES_MAP['math']['train']}")
-            self._train_data = self._load_data_from_file(file_name=AFLOW_DATASET_FILES_MAP["math"]["train"])
+            self._train_data = self._load_data_from_file(file_name=AFLOW_DATASET_FILES_MAP["math"]["train"], split="train")
         if self.mode == "dev" or self.mode == "all":
             logger.info(f"Loading dev data from {AFLOW_DATASET_FILES_MAP['math']['dev']}")
-            self._dev_data = self._load_data_from_file(file_name=AFLOW_DATASET_FILES_MAP["math"]["dev"])
+            self._dev_data = self._load_data_from_file(file_name=AFLOW_DATASET_FILES_MAP["math"]["dev"], split="dev")
         if self.mode == "test" or self.mode == "all":
             logger.info(f"Loading test data from {AFLOW_DATASET_FILES_MAP['math']['test']}")
-            self._test_data = self._load_data_from_file(file_name=AFLOW_DATASET_FILES_MAP["math"]["test"])       
+            self._test_data = self._load_data_from_file(file_name=AFLOW_DATASET_FILES_MAP["math"]["test"], split="test")
     
     async def async_evaluate(self, graph: Callable, example: Any) -> float:
 

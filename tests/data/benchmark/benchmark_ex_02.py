@@ -1,6 +1,6 @@
 from evoagentx.config import Config
 from evoagentx.models import OpenAILLMConfig, OpenAILLM
-from evoagentx.benchmark.WorfBench import WorfBench
+from evoagentx.benchmark.worfbench import WorfBench
 from evoagentx.evaluators import Evaluator
 from evoagentx.workflow import QAActionGraph 
 from evoagentx.core.callbacks import suppress_logger_info
