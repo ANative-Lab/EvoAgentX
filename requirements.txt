@@ -48,7 +48,7 @@ wikipedia>=1.4.0
 beautifulsoup4
 selenium>=4.0.0
 html2text>=2020.1.16
-fastmcp>=2.2.0,<3.0
+fastmcp>=2.4.0,<3.0
 PyPDF2>=3.0.0
 Pillow
 exa-py>=2.0.0
