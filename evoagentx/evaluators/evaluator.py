@@ -241,8 +241,10 @@ class Evaluator:
         """Create a new agent manager with the same configuration but new locks"""
         if self.agent_manager is None:
             return None
-        # Create a new agent manager
-        new_manager = AgentManager(agents=self.agent_manager.agents, storage_handler=self.agent_manager.storage_handler)
+        # Each worker gets its own copy of the agents so short-term memory
+        # buffers do not leak across concurrent examples.
+        copied_agents = [agent.model_copy(deep=True) for agent in self.agent_manager.agents]
+        new_manager = AgentManager(agents=copied_agents, storage_handler=self.agent_manager.storage_handler)
         return new_manager
 
     def _get_thread_agent_manager(self) -> AgentManager:
@@ -502,9 +504,11 @@ class Evaluator:
         graph_copy = WorkFlowGraph(goal=graph.goal, graph=graph)
         graph_copy.reset_graph() # reset the status of all nodes to pending
         
-        # Make a local copy of agent_manager for thread-safety in async context
+        # Make a local copy of agent_manager for thread-safety in async context.
+        # Agents are deep-copied so each coroutine gets its own short-term
+        # memory instead of sharing the parent manager's buffers.
         local_agent_manager = AgentManager(
-            agents=self.agent_manager.agents,
+            agents=[agent.model_copy(deep=True) for agent in self.agent_manager.agents],
             storage_handler=self.agent_manager.storage_handler
         )
         
