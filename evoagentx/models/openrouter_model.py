@@ -159,6 +159,12 @@ class OpenRouterLLM(BaseLLM):
         if self._async_client is not None and not self._async_client.is_closed():
             await self._async_client.close()
 
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self.close_async_client()
+
     def formulate_messages(self, prompts: List[str], system_messages: Optional[List[str]] = None) -> List[List[dict]]:
         if system_messages:
             assert len(prompts) == len(system_messages), f"the number of prompts ({len(prompts)}) is different from the number of system_messages ({len(system_messages)})"
