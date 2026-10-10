@@ -48,8 +48,7 @@ class MapElitesOptimizer(BaseOptimizer):
         self.exploration_ratio = exploration_ratio
         self.random_seed = random_seed
 
-        if random_seed is not None:
-            random.seed(random_seed)
+        self._rng = random.Random(random_seed)
 
         missing = [d for d in self.feature_dimensions if d not in self.feature_ranges]
         if missing:
@@ -70,8 +69,8 @@ class MapElitesOptimizer(BaseOptimizer):
         best_entry: Optional[ArchiveEntry] = None
 
         for step in range(self.n_iterations):
-            if archive and random.random() > self.exploration_ratio:
-                parent = random.choice(list(archive.values()))
+            if archive and self._rng.random() > self.exploration_ratio:
+                parent = self._rng.choice(list(archive.values()))
                 cfg = self._mutate_cfg(parent.cfg)
                 source = "mutate"
             else:
@@ -159,17 +158,17 @@ class MapElitesOptimizer(BaseOptimizer):
         return idx
 
     def _random_cfg(self) -> Dict[str, Any]:
-        return {name: copy.deepcopy(random.choice(values)) for name, values in self.search_space.items()}
+        return {name: copy.deepcopy(self._rng.choice(values)) for name, values in self.search_space.items()}
 
     def _mutate_cfg(self, parent_cfg: Dict[str, Any]) -> Dict[str, Any]:
         if not self.search_space:
             return copy.deepcopy(parent_cfg)
         cfg = copy.deepcopy(parent_cfg)
-        key = random.choice(list(self.search_space.keys()))
+        key = self._rng.choice(list(self.search_space.keys()))
         choices = self.search_space[key]
         if len(choices) <= 1:
             return cfg
         current = cfg.get(key)
         alternatives = [v for v in choices if v != current]
-        cfg[key] = copy.deepcopy(random.choice(alternatives)) if alternatives else current
+        cfg[key] = copy.deepcopy(self._rng.choice(alternatives)) if alternatives else current
         return cfg
