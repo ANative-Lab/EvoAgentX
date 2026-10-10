@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import random
 import re
 import os
@@ -479,7 +480,8 @@ Please provide the paraphrased version in the following format:
     def _generate_combinations(self, node_populations: Dict[str, List[str]]) -> List[Dict[str, str]]:
         node_names = list(node_populations.keys())
         node_prompts = [node_populations[node] for node in node_names]
-        total_possible = np.prod([len(p) for p in node_prompts if p]) if all(p for p in node_prompts) else 0
+        # Search spaces can exceed the range of NumPy's fixed-width integers.
+        total_possible = math.prod(len(p) for p in node_prompts)
 
         if total_possible == 0:
             logger.warning("Cannot generate combinations, one or more node populations are empty.")
