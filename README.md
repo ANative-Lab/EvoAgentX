@@ -553,7 +553,7 @@ Below is a running log of scheduled and completed talks:
 🚩 Join our community to get the latest updates, share your ideas, and collaborate with AI enthusiasts worldwide.
 
 - [Discord](https://discord.gg/XWBZUJFwKe) — Chat, discuss, and collaborate in real-time.
-- [X (formerly Twitter)](https://x.com/EvoAgentX) — Follow us for news, updates, and insights.
+- [X (formerly Twitter)](https://x.com/ANativeLab) — Follow us for news, updates, and insights.
 - [WeChat](https://github.com/EvoAgentX/EvoAgentX/blob/main/assets/wechat_info.md) — Connect with our Chinese community.
 
 ### Add the meeting to your calendar
