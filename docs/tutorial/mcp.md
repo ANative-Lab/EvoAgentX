@@ -88,7 +88,7 @@ The configuration file should be a JSON file that follows FastMCP 2.0's configur
 
 Each server configuration can include:
 
-- `command`: The command to start the MCP server (required)
+- `command`: The command to start a local stdio MCP server (required for local servers)
 - `args`: Command-line arguments for the server (optional)
 - `env`: Environment variables to set when running the server (optional)
 - `timeout`: Connection timeout in seconds (optional, defaults to 120.0)
@@ -122,6 +122,63 @@ toolkit = MCPToolkit(config=config)
 
 # Get all available tools
 tools = toolkit.get_toolkits()
+```
+
+### 2.3 Remote HTTP Servers: Keyless Web Search
+
+Remote servers use a `url` instead of a local `command`. Streamable HTTP
+configuration requires FastMCP 2.4 or later, within the supported 2.x series.
+Install the tools extra from the repository root:
+
+```bash
+pip install -e '.[tools]'
+```
+
+[Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp)
+provides `web_search` and `web_fetch` without a Parallel account or API key.
+Anonymous searches use Fast mode and free access is rate limited.
+
+```python
+from evoagentx import __version__
+from evoagentx.tools import MCPToolkit
+
+config = {
+    "mcpServers": {
+        "parallel-search": {
+            "url": "https://search.parallel.ai/mcp",
+            "transport": "http",
+            "headers": {"User-Agent": f"EvoAgentX/{__version__}"},
+        }
+    }
+}
+
+toolkit = MCPToolkit(config=config)
+try:
+    toolkits = toolkit.get_toolkits()
+    # Pass these toolkits to your agent, or call their tools directly.
+    for server in toolkits:
+        print(server.name, [tool.name for tool in server.get_tools()])
+finally:
+    toolkit.disconnect()
+```
+
+The `headers` field identifies EvoAgentX through its package version so Parallel
+can measure aggregate free MCP usage. It contains no user or installation ID.
+For a JSON configuration file, use a literal value such as `EvoAgentX/0.1.4`;
+Python expressions are not evaluated by the JSON loader.
+
+This connection is enabled only when your application loads the configuration.
+It does not select a default search provider or change your other toolkits.
+Once you give these tools to an agent, it may call them during its work. Search
+queries, requested URLs, and any supplied objectives or context go to Parallel.
+Use public information in this example. No Authorization header is needed for
+the anonymous endpoint.
+
+For a complete example that discovers the tools, runs a search, fetches a public
+page, and disconnects, run:
+
+```bash
+python examples/tools/parallel_search_mcp.py
 ```
 
 ---
