@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import math
 import random
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
@@ -121,7 +122,10 @@ class MapElitesOptimizer(BaseOptimizer):
         fitness = metrics[self.fitness_key]
         if not isinstance(fitness, (int, float)) or isinstance(fitness, bool):
             raise TypeError(f"fitness_key '{self.fitness_key}' must be numeric")
-        return metrics, float(fitness)
+        fitness = float(fitness)
+        if not math.isfinite(fitness):
+            raise ValueError(f"fitness_key '{self.fitness_key}' must be finite")
+        return metrics, fitness
 
     def _bins_for_dim(self, dim: str) -> int:
         if isinstance(self.feature_bins, int):
@@ -139,9 +143,12 @@ class MapElitesOptimizer(BaseOptimizer):
             value = metrics[dim]
             if not isinstance(value, (int, float)) or isinstance(value, bool):
                 raise TypeError(f"feature dimension '{dim}' must be numeric")
+            value = float(value)
+            if not math.isfinite(value):
+                raise ValueError(f"feature dimension '{dim}' must be finite")
             lo, hi = self.feature_ranges[dim]
             bins = max(1, self._bins_for_dim(dim))
-            coords.append(self._bin_index(float(value), lo, hi, bins))
+            coords.append(self._bin_index(value, lo, hi, bins))
         return tuple(coords)
 
     @staticmethod
