@@ -656,7 +656,8 @@ class ReadMessagesTool(Tool):
         },
         "label_ids": {
             "type": "array",
-            "description": "List of label IDs to filter by (e.g., ['INBOX', 'UNREAD']). Optional."
+            "description": "List of label IDs to filter by (e.g., ['INBOX', 'UNREAD']). Optional.",
+            "items": {"type": "string"}
         },
         "max_results": {
             "type": "integer",
@@ -722,7 +723,8 @@ class SearchMessagesTool(Tool):
         },
         "label_ids": {
             "type": "array",
-            "description": "Optional list of label IDs to filter by (e.g., ['INBOX', 'UNREAD'])."
+            "description": "Optional list of label IDs to filter by (e.g., ['INBOX', 'UNREAD']).",
+            "items": {"type": "string"}
         },
         "max_results": {
             "type": "integer",
@@ -774,7 +776,8 @@ class ReadThreadsTool(Tool):
         },
         "label_ids": {
             "type": "array",
-            "description": "List of label IDs to filter by (e.g., ['INBOX', 'UNREAD']). Optional."
+            "description": "List of label IDs to filter by (e.g., ['INBOX', 'UNREAD']). Optional.",
+            "items": {"type": "string"}
         },
         "max_results": {
             "type": "integer",
@@ -814,7 +817,8 @@ class TrashMessagesTool(Tool):
     inputs: Dict[str, Dict[str, str]] = {
         "message_ids": {
             "type": "array",
-            "description": "Optional list of message IDs to move to Trash (as returned by read/search tools)."
+            "description": "Optional list of message IDs to move to Trash (as returned by read/search tools).",
+            "items": {"type": "string"}
         },
         "query": {
             "type": "string",
@@ -922,10 +926,14 @@ class ModifyLabelsTool(Tool):
         "Label names will be resolved to system ids or created if custom."
     )
     inputs: Dict[str, Dict[str, str]] = {
-        "message_ids": {"type": "array", "description": "List of message IDs to modify"},
+        "message_ids": {"type": "array", "description": "List of message IDs to modify", "items": {"type": "string"}},
         "query": {"type": "string", "description": "Gmail query to select messages (optional)"},
-        "add_labels": {"type": "array", "description": "List of label names to add (e.g., ['STARRED','MyLabel'])"},
-        "remove_labels": {"type": "array", "description": "List of label names to remove"},
+        "add_labels": {
+            "type": "array",
+            "description": "List of label names to add (e.g., ['STARRED','MyLabel'])",
+            "items": {"type": "string"}
+        },
+        "remove_labels": {"type": "array", "description": "List of label names to remove", "items": {"type": "string"}},
         "max_results": {"type": "integer", "description": "Max messages when using query (default 50)"}
     }
     required: List[str] = []
@@ -998,7 +1006,8 @@ class CreateDraftTool(Tool):
         },
         "attachments": {
             "type": "array",
-            "description": "List of file paths to attach to the draft (optional, e.g., ['/path/to/file1.pdf', '/path/to/file2.txt'])"
+            "description": "List of file paths to attach to the draft (optional, e.g., ['/path/to/file1.pdf', '/path/to/file2.txt'])",
+            "items": {"type": "string"}
         }
     }
     required: List[str] = ["to", "subject", "body"]
@@ -1292,7 +1301,8 @@ class UpdateDraftTool(Tool):
         },
         "attachments": {
             "type": "array",
-            "description": "List of file paths to attach to the draft (optional)"
+            "description": "List of file paths to attach to the draft (optional)",
+            "items": {"type": "string"}
         }
     }
     required: List[str] = ["draft_id"]
