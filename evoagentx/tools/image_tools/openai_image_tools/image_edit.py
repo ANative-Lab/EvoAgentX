@@ -10,7 +10,7 @@ class OpenAIImageEditTool(Tool):
 
     inputs: Dict[str, Dict[str, str]] = {
         "prompt": {"type": "string", "description": "Edit instruction. Required."},
-        "images": {"type": "array", "description": "Image path(s) png/webp/jpg <50MB. Required. Single string accepted and normalized to array."},
+        "images": {"type": "array", "description": "Image path(s) png/webp/jpg <50MB. Required. Single string accepted and normalized to array.", "items": {"type": "string"}},
         "mask_path": {"type": "string", "description": "Optional PNG mask path (same size as first image)."},
         "size": {"type": "string", "description": "1024x1024 | 1536x1024 | 1024x1536 | auto"},
         "n": {"type": "integer", "description": "1-10"},

@@ -802,7 +802,8 @@ class FaissInsertTool(Tool):
     inputs: Dict[str, Dict[str, Any]] = {
         "documents": {
             "type": "array",
-            "description": "Array of documents to insert. Can be strings (text content or file paths), or objects with 'text', 'metadata', and 'doc_id' fields. If a string contains path separators or file extensions and the file exists, it will be treated as a file path and its content will be read and processed."
+            "description": "Array of documents to insert. Can be strings (text content or file paths), or objects with 'text', 'metadata', and 'doc_id' fields. If a string contains path separators or file extensions and the file exists, it will be treated as a file path and its content will be read and processed.",
+            "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}
         },
         "corpus_id": {
             "type": "string",

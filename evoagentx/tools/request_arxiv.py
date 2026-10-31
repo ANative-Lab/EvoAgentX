@@ -277,7 +277,8 @@ class ArxivSearchTool(Tool):
         },
         "id_list": {
             "type": "array",
-            "description": "List of arXiv IDs to retrieve (e.g., ['1706.03762', '1810.04805'])"
+            "description": "List of arXiv IDs to retrieve (e.g., ['1706.03762', '1810.04805'])",
+            "items": {"type": "string"}
         },
         "max_results": {
             "type": "integer",

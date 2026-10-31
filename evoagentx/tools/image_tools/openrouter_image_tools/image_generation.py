@@ -14,8 +14,8 @@ class OpenRouterImageGenerationEditTool(Tool):
 
     inputs: Dict[str, Dict] = {
         "prompt": {"type": "string", "description": "Text prompt."},
-        "image_urls": {"type": "array", "description": "Remote image URLs (optional)."},
-        "image_paths": {"type": "array", "description": "Local image paths (optional)."},
+        "image_urls": {"type": "array", "description": "Remote image URLs (optional).", "items": {"type": "string"}},
+        "image_paths": {"type": "array", "description": "Local image paths (optional).", "items": {"type": "string"}},
         "model": {"type": "string", "description": "OpenRouter model id.", "default": "google/gemini-2.5-flash-image-preview"},
         "api_key": {"type": "string", "description": "OpenRouter API key (fallback to env OPENROUTER_API_KEY)."},
         "save_path": {"type": "string", "description": "Directory to save images (when data URLs).", "default": "./openrouter_images"},
