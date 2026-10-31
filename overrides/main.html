@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block announce %}
+  <span class="twemoji bullhorn">
+    {% include ".icons/fontawesome/solid/bullhorn.svg" %}
+  </span>&nbsp
+  <strong>EvoAgentX</strong> is here! 👉 Building a Self-Evolving Ecosystem of AI Agents.
+{% endblock %}
+
+{% block outdated %}
+  You're not viewing the latest version.
+  <a href="{{ '../' ~ base_url }}"> 
+    <strong>Click here to go to latest.</strong>
+  </a>
+{% endblock %}

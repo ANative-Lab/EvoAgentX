@@ -1,0 +1,56 @@
+Q1：如何理解 WorkFlowGenerator 的工作流生成逻辑？我能否基于知识库和规则进行生成？
+A：
+WorkFlowGenerator 的核心逻辑可以分为两个主要阶段：
+1. 子任务生成：将用户的目标需求拆解为一系列子任务，并明确每个子任务的输入、输出与目标。
+2. Agent 配置生成：为每个子任务生成或配置合适的 Agent，包括其执行逻辑和所需参数。
+这两个阶段都有各自独立的 Prompt，并且可以通过向 WorkflowGenerator 传入 suggestion 变量来进行干预和优化。此外，子任务生成完成后会以图结构（WorkflowGraph）的形式组织任务流程，随后进入 Agent 参数的填充阶段。
+
+---
+Q2：目前 MCPTool 是需要手动调用的吗？系统是否能根据 LLM 返回信息自动调用？
+A：
+ 目前 tools 模块尚未正式合并进主分支（main），需要在专门的 tools 开发分支中使用。在使用中，您需要手动提供包含工具名称和定义（tool_names 和 tool_dict）的相关信息，Agent 才能进行工具的自动调用。
+详细使用方式可以参考项目中的自定义 Agent（agents/customize_agent）和工具调用模块（actions/tool_calling）。
+另外，官方也提供了一个简洁的示例教程，可在下方链接中查看实际运行流程：
+  Workflow Jobs 示例 https://github.com/EvoAgentX/EvoAgentX/blob/tools/examples/workflow_jobs.ipynb
+
+---
+Q3：项目支持使用本地模型吗？有没有相关的教程或 Demo？
+A：
+ 是的，EvoAgentX 支持使用本地模型。相关配置方法和说明文档可以参考官方文档中的说明：
+  本地模型支持文档  https://github.com/EvoAgentX/EvoAgentX/blob/main/docs/modules/llm.md#local-llm
+
+---
+Q4：如果我使用的是阿里云的千问模型（调用方式与 OpenAI 类似），该如何集成到 EvoAgentX 中？
+A：
+ 您可以参考官方文档中 ollama 框架下的配置方法来接入类似 OpenAI 接口的本地模型。链接如下：
+  使用本地 LLM 的文档 https://github.com/EvoAgentX/EvoAgentX/blob/main/docs/modules/llm.md#local-llm
+
+---
+Q5：是否支持使用 Perplexity 的 Sonar 模型 API？
+A：
+ 支持。LiteLLM 类已经兼容 Perplexity 的模型。您只需在 LiteLLMConfig 中设置 perplexity_key，并根据 Perplexity 官方文档  https://docs.litellm.ai/docs/providers/perplexity
+选择对应的模型名称，即可使用。
+
+---
+Q6：是否可以获取 EvoAgentX 的 benchmark 任务数据，例如多 Agent 在执行 LiveCodeBench 时的轨迹（trajectory）数据？
+A：
+ 当然可以。如果您是通过 WorkFlow 类来运行任务的，那么其内部的 environment 变量中会自动记录整个执行过程的完整轨迹信息，包含所有中间步骤和调用结果。
+
+---
+Q7：是否计划提供一个简单的前端界面以便使用 EvoAgentX？
+A：
+ 是的，EvoAgentX 团队已有开发前端界面的计划，并将其列入开发任务排期中，欢迎社区开发者一起参与贡献。
+
+---
+Q8：在 docs/zh/modules/customize_agent.md 案例中，能否查看把inputs组合进提示词模板之后的完整提示词内容？
+A：
+ 可以的。如果您使用的是主分支版本，可以查看源码 /evoagentx/agents/customize_agent.py，其中 prepare_action_prompt 函数（大约在第 72 行）负责处理 Prompt 模板的组合逻辑。
+您可以通过在该位置设置断点进行调试，例如加入：from pdb import set_trace; set_trace()
+然后检查目标变量，即可查看最终生成的完整 Prompt。
+
+---
+Q9：EvoAgentX 目前支持哪些大模型？除了 OpenAI，还能用 DeepSeek、通义千问等模型吗？
+A：
+ 完全可以！EvoAgentX 通过 OpenRouter 接入了平台上绝大多数主流模型，此外还支持使用 LiteLLM 与 SiliconFlow 等方案灵活配置自托管或第三方 LLM。
+具体的配置示例、参数说明与常见坑位，可参考官方文档：
+  LLM 支持与配置指南 https://evoagentx.github.io/EvoAgentX/modules/llm.html
