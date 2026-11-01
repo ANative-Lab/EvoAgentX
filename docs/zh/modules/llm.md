@@ -122,6 +122,35 @@ response = llm.generate(
 )
 ```
 
+### RuncrateLLM
+
+RuncrateLLM 是 [Runcrate](https://runcrate.ai/) 的适配器，Runcrate 通过 OpenAI 兼容的 API 提供 DeepSeek、Qwen、Kimi、GLM 和 gpt-oss 等开源权重模型。
+
+`RuncrateLLM` 模型类复用 EvoAgentX 中的 OpenAI 聊天补全逻辑（流式、异步和工具调用），并将请求发送到 `https://api.runcrate.ai/v1`。如果未设置 `runcrate_key`，则会使用环境变量 `RUNCRATE_API_KEY`。可用模型列表请参阅 [Runcrate 文档](https://runcrate.ai/docs)。
+
+**基本用法：**
+
+```python
+from evoagentx.models import RuncrateConfig, RuncrateLLM
+
+# Configure the model
+config = RuncrateConfig(
+    model="deepseek-ai/DeepSeek-V4-Flash",
+    runcrate_key="your-runcrate-api-key",
+    temperature=0.7,
+    max_tokens=1000
+)
+
+# Initialize the model
+llm = RuncrateLLM(config=config)
+
+# Generate text
+response = llm.generate(
+    prompt="Write a poem about artificial intelligence.",
+    system_message="You are a creative poet."
+)
+```
+
 ### OpenRouterLLM
 
 OpenRouterLLM 是 [OpenRouter 平台](https://openrouter.ai/) 的适配器，该平台通过统一的 API 提供对各种提供商的语言模型的访问。它支持来自 Anthropic、Google、Meta、Mistral AI 等提供商的模型，所有这些都可以通过单一接口访问。

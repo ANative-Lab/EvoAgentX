@@ -123,6 +123,35 @@ response = llm.generate(
 )
 ```
 
+### RuncrateLLM
+
+RuncrateLLM is an adapter for [Runcrate](https://runcrate.ai/), which serves open-weight models such as DeepSeek, Qwen, Kimi, GLM and gpt-oss through an OpenAI-compatible API.
+
+The `RuncrateLLM` model class reuses the OpenAI chat-completions logic in EvoAgentX (streaming, async and tool calls) and points it at `https://api.runcrate.ai/v1`. If `runcrate_key` is not set, the `RUNCRATE_API_KEY` environment variable is used. See the [Runcrate docs](https://runcrate.ai/docs) for the list of available models.
+
+**Basic Usage:**
+
+```python
+from evoagentx.models import RuncrateConfig, RuncrateLLM
+
+# Configure the model
+config = RuncrateConfig(
+    model="deepseek-ai/DeepSeek-V4-Flash",
+    runcrate_key="your-runcrate-api-key",
+    temperature=0.7,
+    max_tokens=1000
+)
+
+# Initialize the model
+llm = RuncrateLLM(config=config)
+
+# Generate text
+response = llm.generate(
+    prompt="Write a poem about artificial intelligence.",
+    system_message="You are a creative poet."
+)
+```
+
 ### OpenRouterLLM
 
 OpenRouterLLM is an adapter for the [OpenRouter platform](https://openrouter.ai/), which provides access to a wide range of language models from various providers through a unified API. It supports models from providers like Anthropic, Google, Meta, Mistral AI, and more, all accessible through a single interface.
