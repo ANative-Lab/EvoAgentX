@@ -15,7 +15,7 @@ from .telegram_tools import TelegramToolkit
 from .gmail_tools import GmailToolkit
 from .database_mongodb import MongoDBToolkit
 from .database_postgresql import PostgreSQLToolkit
-from .storage_handler import FileStorageHandler, LocalStorageHandler, SupabaseStorageHandler
+from .storage_handler import FileStorageHandler, LocalStorageHandler, SupabaseStorageHandler, NeonStorageHandler
 from .storage_file import StorageToolkit
 from .image_tools.flux_image_tools.image_generation_edit import FluxImageGenerationEditTool
 from .image_tools.flux_image_tools.toolkit import FluxImageGenerationToolkit
@@ -57,6 +57,7 @@ __all__ = [
     "FileStorageHandler",
     "LocalStorageHandler",
     "SupabaseStorageHandler",
+    "NeonStorageHandler",
     "StorageToolkit",
     "FluxImageGenerationEditTool",
     "FluxImageGenerationToolkit",

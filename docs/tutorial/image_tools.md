@@ -254,7 +254,7 @@ print(res["file_path"])
 
 - **Storage Support**: All image tools support flexible storage options:
   - **Local Storage**: Default option for saving images to local filesystem
-  - **Remote Storage**: Optional Supabase cloud storage for distributed access
+  - **Remote Storage**: Optional Supabase or Neon cloud storage for distributed access
 - **File Operations**: All file I/O is handled automatically through the storage system
 - **Toolkit Parameters**: All toolkits accept `storage_handler` parameter for custom storage
 - Both OpenRouter and OpenAI analysis tools support `image_path` (auto-converted to data URL); `image_url` also works.
@@ -267,6 +267,7 @@ print(res["file_path"])
 - **Storage errors?** 
   - Local storage: Check directory permissions and disk space
   - Supabase storage: Verify environment variables and bucket access
+  - Neon storage: Verify environment variables and bucket access
 - **File not found errors?** Check if the storage path is correct and accessible
 
 
