@@ -103,6 +103,10 @@ class StorageBase(BaseModule, ABC):
     
     
     # ____________________ PATH TRANSLATION ____________________ #
+    def _is_remote_storage(self) -> bool:
+        """Check if this handler stores files in a remote bucket (Supabase or Neon)"""
+        return hasattr(self, 'bucket_name') and (hasattr(self, 'supabase') or hasattr(self, 's3_client'))
+    
     def translate_in(self, file_path: str) -> str:
         """
         Translate input file path by combining it with base_path.
@@ -119,8 +123,8 @@ class StorageBase(BaseModule, ABC):
             return file_path
         
         # Always combine base_path with file_path to ensure working directory is respected
-        # Check if this is a remote storage handler (like Supabase)
-        if hasattr(self, 'bucket_name') and hasattr(self, 'supabase'):
+        # Check if this is a remote storage handler (like Supabase or Neon)
+        if self._is_remote_storage():
             # For remote storage, treat base_path as a prefix within the bucket
             # Don't use os.path.join as it's designed for local filesystems
             if self.base_path.startswith('/'):
@@ -154,8 +158,8 @@ class StorageBase(BaseModule, ABC):
         if self.base_path in [".", "", None]:
             return full_path
         
-        # Check if this is a remote storage handler (like Supabase)
-        if hasattr(self, 'bucket_name') and hasattr(self, 'supabase'):
+        # Check if this is a remote storage handler (like Supabase or Neon)
+        if self._is_remote_storage():
             # For remote storage, handle path prefix removal
             if self.base_path.startswith('/'):
                 clean_base = self.base_path.lstrip('/')

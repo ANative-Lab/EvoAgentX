@@ -3012,7 +3012,7 @@ ls evoagentx/tools/image_tools/flux_image_tools/
 
 Image handling tools provide comprehensive capabilities for image analysis, generation, and manipulation using various AI services and APIs. These tools enable agents to work with visual content, generate images from text descriptions, and analyze image content.
 
-**Storage Support**: All image toolkits support flexible file storage options through the `storage_handler` parameter, allowing you to use local storage, remote storage (Supabase), or custom storage implementations.
+**Storage Support**: All image toolkits support flexible file storage options through the `storage_handler` parameter, allowing you to use local storage, remote storage (Supabase or Neon), or custom storage implementations.
 
 ### 6.1 OpenAIImageToolkit
 
@@ -3240,6 +3240,22 @@ os.environ["SUPABASE_BUCKET_STORAGE"] = "your-bucket-name"
 
 # Use Supabase storage
 storage_handler = SupabaseStorageHandler(bucket_name="my-images")
+toolkit = OpenAIImageToolkit(api_key=API_KEY, storage_handler=storage_handler)
+```
+
+#### 6.4.3 Remote Storage (Neon)
+```python
+from evoagentx.tools import NeonStorageHandler
+import os
+
+# Set environment variables
+os.environ["AWS_ENDPOINT_URL_S3"] = "your-neon-storage-endpoint"
+os.environ["AWS_ACCESS_KEY_ID"] = "your-neon-access-key-id"
+os.environ["AWS_SECRET_ACCESS_KEY"] = "your-neon-secret-access-key"
+os.environ["NEON_BUCKET_STORAGE"] = "your-bucket-name"
+
+# Use Neon storage
+storage_handler = NeonStorageHandler(bucket_name="my-images")
 toolkit = OpenAIImageToolkit(api_key=API_KEY, storage_handler=storage_handler)
 ```
 

@@ -106,7 +106,7 @@ Environment:
 - All tools use the storage handler architecture:
   - **Storage Handler**: All toolkits accept `storage_handler` parameter (defaults to `LocalStorageHandler`)
   - **File Operations**: Automatic path translation and format detection
-  - **Supported Storage**: Local filesystem and Supabase cloud storage
+  - **Supported Storage**: Local filesystem, Supabase cloud storage, and Neon cloud storage
 - Typical returns:
   - OpenAI generation/edit: `{ "results": ["<local_path>", ...] }`
   - OpenRouter generation/edit: `{ "saved_paths": ["<local_path>", ...] }`
