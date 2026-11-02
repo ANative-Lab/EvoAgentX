@@ -53,7 +53,7 @@ EvoAgentX is an open-source framework for building, evaluating, and evolving LLM
   Agents don’t just work—they learn. EvoAgentX improves workflows using self-evolving algorithms.
 - 🧩 **Plug-and-Play Compatibility**
   
-  Easily integrate original [OpenAI](https://github.com/EvoAgentX/EvoAgentX/blob/main/evoagentx/models/openai_model.py) and [qwen](https://github.com/EvoAgentX/EvoAgentX/blob/main/evoagentx/models/aliyun_model.py) or other popular models, including Claude, Deepseek, kimi models through ([LiteLLM](https://github.com/EvoAgentX/EvoAgentX/blob/main/evoagentx/models/litellm_model.py), [siliconflow](https://github.com/EvoAgentX/EvoAgentX/blob/main/evoagentx/models/siliconflow_model.py) or [openrouter](https://github.com/EvoAgentX/EvoAgentX/blob/main/evoagentx/models/openrouter_model.py)). If you want to use LLMs locally deployed on your own machine, you can try LiteLLM. 
+  Easily integrate original [OpenAI](https://github.com/EvoAgentX/EvoAgentX/blob/main/evoagentx/models/openai_model.py) and [qwen](https://github.com/EvoAgentX/EvoAgentX/blob/main/evoagentx/models/aliyun_model.py) or other popular models, including Claude, Deepseek, kimi models through ([LiteLLM](https://github.com/EvoAgentX/EvoAgentX/blob/main/evoagentx/models/litellm_model.py), [siliconflow](https://github.com/EvoAgentX/EvoAgentX/blob/main/evoagentx/models/siliconflow_model.py), [openrouter](https://github.com/EvoAgentX/EvoAgentX/blob/main/evoagentx/models/openrouter_model.py), or [Atlas Cloud](https://www.atlascloud.ai/)). If you want to use LLMs locally deployed on your own machine, you can try LiteLLM.
 
 - 🧰 **Comprehensive Built-in Tools**
   
@@ -247,6 +247,20 @@ llm = OpenAILLM(config=openai_config)
 
 # Generate a response from the LLM
 response = llm.generate(prompt="What is Agentic Workflow?")
+```
+
+Atlas Cloud is available as an optional OpenAI-compatible provider:
+
+```python
+import os
+from evoagentx.models import AtlasCloudConfig, AtlasCloudLLM
+
+llm = AtlasCloudLLM(
+    config=AtlasCloudConfig(
+        model="openai/gpt-5.6-luna",
+        atlascloud_key=os.getenv("ATLASCLOUD_API_KEY"),
+    )
+)
 ```
 > 📖 More details on supported models and config options: [LLM module guide](./docs/modules/llm.md).
 

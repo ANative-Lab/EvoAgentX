@@ -140,6 +140,34 @@ class SiliconFlowConfig(LLMConfig):
         return self.model
 
 
+class AtlasCloudConfig(LLMConfig):
+
+    llm_type: str = "AtlasCloudLLM"
+    atlascloud_key: Optional[str] = Field(
+        default=None,
+        description="the API key used to authenticate Atlas Cloud requests",
+    )
+
+    # generation parameters
+    temperature: Optional[float] = Field(default=None, description="the temperature used to scaling logits")
+    max_tokens: Optional[int] = Field(default=None, description="maximum number of generated tokens")
+    max_completion_tokens: Optional[int] = Field(default=None, description="An upper bound for the number of tokens that can be generated for a completion, including visible output tokens and reasoning tokens.")
+    top_p: Optional[float] = Field(default=None, description="Only sample from tokens with cumulative probability greater than top_p when generating text.")
+    n: Optional[int] = Field(default=None, description="How many chat completion choices to generate for each input message.")
+    stream: Optional[bool] = Field(default=None, description="If set to true, it sends partial message deltas as they become available.")
+    stream_options: Optional[dict] = Field(default=None, description="Options for streaming responses.")
+    timeout: Optional[Union[float, int]] = Field(default=None, description="Timeout in seconds for completion requests.")
+
+    # tools and output format
+    tools: Optional[List] = Field(default=None, description="A list of tools the model may call.")
+    tool_choice: Optional[Union[str, dict]] = Field(default=None, description="Controls which tool the model may call.")
+    parallel_tool_calls: Optional[bool] = Field(default=None, description="Whether to enable parallel function calling during tool use.")
+    response_format: Optional[Union[BaseModel, dict]] = Field(default=None, description="An object specifying the format that the model must output.")
+
+    def __str__(self):
+        return self.model
+
+
 class NovitaConfig(LLMConfig):
 
     # LLM keys
