@@ -97,6 +97,11 @@ class ContextManager:
             else:
                 self.context[-1]["content"] = last_msg + user_prompt
         
+        elif isinstance(self.context[-1]["content"], list):
+            self.context[-1]["content"] = [
+                *self.context[-1]["content"],
+                {"type": "text", "text": user_prompt},
+            ]
         else:
             self.context[-1]["content"] += "\n\n" + user_prompt
 
