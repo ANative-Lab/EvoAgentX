@@ -162,6 +162,7 @@ class LiteLLM(OpenAILLM):
 
         return output
 
+    @retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(5))
     async def single_generate_async(self, messages: List[dict], **kwargs) -> str:
         """
         Generate a single response using the async LiteLLM completion function.
