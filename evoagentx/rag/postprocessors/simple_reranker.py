@@ -48,8 +48,10 @@ class SimpleReranker(BasePostprocessor):
             for result in results:
                 for chunk, score in zip(result.corpus.chunks, result.scores):
                     node = chunk.to_llama_node()
+                    # IDs are local to a corpus. Use a request-local identity
+                    # while postprocessors combine nodes from several corpora.
+                    node.id_ = str(len(nodes))
                     nodes.append(NodeWithScore(node=node, score=score))
-                    # Map node ID to original chunk
                     chunk_to_original[node.id_] = chunk
             
             # Apply postprocessors

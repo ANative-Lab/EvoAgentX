@@ -66,3 +66,23 @@ class IndexStore(BaseModel):
     content: Dict[str, Any] = Field(..., description="Serialized index content (e.g., LlamaIndex JSON)")
     date: Optional[str] = Field(default="", description="Creation or last update date")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata, e.g., vector store collection name")
+
+
+def expand_index_record(record: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Expand an aggregate DB row, retaining support for old single-index rows."""
+    if record.get("metadata", {}).get("snapshot_format") != 2:
+        return [record]
+    indices = record.get("content", {}).get("indices")
+    if not isinstance(indices, dict):
+        raise ValueError("Aggregate snapshot must contain an indices object")
+    records = []
+    for index_type, payload in indices.items():
+        if not isinstance(payload, dict):
+            raise ValueError("Aggregate index payload must be an object")
+        single = dict(payload, corpus_id=record["corpus_id"])
+        if single.get("metadata", {}).get("index_type") != index_type:
+            raise ValueError("Aggregate index key disagrees with its metadata")
+        if single["metadata"].get("corpus_id", record["corpus_id"]) != record["corpus_id"]:
+            raise ValueError("Aggregate index belongs to a different corpus")
+        records.append(single)
+    return records

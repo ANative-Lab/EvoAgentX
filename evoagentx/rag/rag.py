@@ -1,23 +1,26 @@
-import os
-import json
 import asyncio
 from uuid import uuid4
 from datetime import datetime
+from threading import RLock
 from typing import List, Union, Optional, Sequence, Dict, Any, Tuple
-from llama_index.core.schema import NodeWithScore, TextNode, ImageNode, RelatedNodeInfo
+from llama_index.core.schema import BaseNode, NodeWithScore, TextNode, ImageNode
 
 from .rag_config import RAGConfig
 from .readers import LLamaIndexReader, MultimodalReader
 from .indexings import IndexFactory, BaseIndexWrapper
 from .chunkers import ChunkFactory
-from .embeddings import EmbeddingFactory, EmbeddingProvider
+from .embeddings import EmbeddingFactory
 from .retrievers import RetrieverFactory, BaseRetrieverWrapper
 from .postprocessors import PostprocessorFactory
 from .indexings.base import IndexType
 from .retrievers.base import RetrieverType
 from .schema import Corpus, ChunkMetadata, IndexMetadata, Query, RagResult, ImageChunk, TextChunk
 from evoagentx.storages.base import StorageHandler
-from evoagentx.storages.schema import IndexStore
+from evoagentx.storages.schema import IndexStore, expand_index_record
+from .snapshots import (
+    IndexSnapshot, load_file_snapshots,
+    save_file_snapshot, snapshot_from_record,
+)
 from evoagentx.models.base_model import BaseLLM
 from evoagentx.core.logging import logger
 
@@ -25,7 +28,8 @@ from evoagentx.core.logging import logger
 class RAGEngine:
     def __init__(self, config: RAGConfig, storage_handler: StorageHandler, llm: Optional[BaseLLM] = None):
         self.config = config
-        self.storage_handler = storage_handler  # Maybe reinit the vector_store by the load funcion.
+        self.storage_handler = storage_handler
+        self._registry_lock = RLock()
         self.embedding_factory = EmbeddingFactory()
         self.index_factory = IndexFactory()
         self.chunk_factory = ChunkFactory()
@@ -155,57 +159,76 @@ class RAGEngine:
             logger.error(f"Failed to read documents for corpus {corpus_id}: {str(e)}")
             raise
 
-    def add(self, index_type: str, nodes: Union[Corpus, List[NodeWithScore], List[TextNode], List[ImageNode]], 
-            corpus_id: str = None) -> None:
-        """Add nodes to an index for a specific corpus.
+    def _new_index(self, index_type: str) -> BaseIndexWrapper:
+        """Construct an unregistered index using the engine's embedding model."""
+        return self.index_factory.create(
+            index_type=index_type,
+            embed_model=self.embed_model.get_embedding_model(),
+            storage_handler=self.storage_handler,
+            index_config=self.config.index.model_dump(exclude_unset=True) if self.config.index else {},
+            llm=self.llm,
+        )
 
-        Initializes an index if it doesn't exist and inserts nodes, updating metadata with corpus_id and index_type.
+    def _new_retriever(self, index_type: str, index: BaseIndexWrapper):
+        """Bind a retriever to the same corpus-owned index and node catalog."""
+        retriever_type = RetrieverType.GRAPH if index_type == IndexType.GRAPH else RetrieverType.VECTOR
+        return self.retriever_factory.create(
+            retriever_type=retriever_type,
+            llm=self.llm,
+            index=index.get_index(),
+            graph_store=index.get_index().storage_context.graph_store,
+            embed_model=self.embed_model.get_embedding_model(),
+            query=Query(query_str="", top_k=self.config.retrieval.top_k),
+            storage_handler=self.storage_handler,
+            chunk_class=self.chunk_class,
+        )
 
-        Args:
-            index_type (str): Type of index (e.g., VECTOR, GRAPH).
-            nodes (Union[Corpus, List[NodeWithScore], List[TextNode]]): Nodes or Corpus to add.
-            corpus_id (str, optional): Identifier for the corpus. Defaults to a UUID if None.
+    @staticmethod
+    def _owned_nodes(nodes, corpus_id, index_type):
+        """Copy a caller's nodes before assigning index ownership metadata."""
+        source = nodes.to_llama_nodes() if isinstance(nodes, Corpus) else nodes
+        owned = []
+        for node in source:
+            if isinstance(node, NodeWithScore):
+                node = node.node
+            if isinstance(node, (TextChunk, ImageChunk)):
+                node = node.to_llama_node()
+            if not isinstance(node, BaseNode):
+                raise TypeError("Expected Corpus, chunks, BaseNode or NodeWithScore inputs")
+            node = node.model_copy(deep=True)
+            node.metadata.update(corpus_id=corpus_id, index_type=index_type)
+            owned.append(node)
+        return owned
 
-        Return:
-            return a sequence with id of each added node.
-            
-        Raises:
-            Exception: If index creation or node insertion fails.
+    def add(self, index_type: str, nodes: Union[Corpus, List[NodeWithScore], List[TextNode], List[ImageNode]],
+            corpus_id: str = None) -> Sequence[str]:
+        """Insert a batch and publish a new corpus only after successful ingestion.
+
+        Uses the Corpus identity when no explicit corpus_id is supplied. Input
+        nodes remain caller-owned. As before, ingestion failures return an empty
+        list; transactional vector writes retain the previous committed state.
         """
         try:
-            corpus_id = corpus_id or str(uuid4())
-            if corpus_id not in self.indices:
-                self.indices[corpus_id] = {}
-                self.retrievers[corpus_id] = {}
-
-            if index_type not in self.indices[corpus_id]:
-                index = self.index_factory.create(
-                    index_type=index_type,
-                    embed_model=self.embed_model.get_embedding_model(),
-                    storage_handler=self.storage_handler,
-                    index_config=self.config.index.model_dump(exclude_unset=True) if self.config.index else {},
-                    llm=self.llm,
-                )
-                self.indices[corpus_id][index_type] = index
-                self.retrievers[corpus_id][index_type] = self.retriever_factory.create(
-                    retriever_type=self.config.retrieval.retrivel_type,
-                    llm=self.llm,
-                    index=index.get_index(),
-                    graph_store=index.get_index().storage_context.graph_store,
-                    embed_model=self.embed_model.get_embedding_model(),
-                    query=Query(query_str="", top_k=self.config.retrieval.top_k if self.config.retrieval else 5),
-                    storage_handler=self.storage_handler,
-                    chunk_class=self.chunk_class  
-                )
-
-            nodes_to_insert = nodes.to_llama_nodes() if isinstance(nodes, Corpus) else nodes
-            for node in nodes_to_insert:
-                node.metadata.update({"corpus_id": corpus_id, "index_type": index_type})
-            nodes_ids = self.indices[corpus_id][index_type].insert_nodes(nodes_to_insert)
-            logger.info(f"Added {len(nodes_to_insert)} nodes to {index_type} index for corpus {corpus_id}")
-            return nodes_ids
-        except Exception as e:
-            logger.error(f"Failed to add nodes to {index_type} index for corpus {corpus_id}: {str(e)}")
+            if corpus_id is None:
+                corpus_id = str(nodes.corpus_id) if isinstance(nodes, Corpus) else str(uuid4())
+            if not isinstance(corpus_id, str) or not corpus_id:
+                raise ValueError("corpus_id must be a nonempty string")
+            owned = self._owned_nodes(nodes, corpus_id, index_type)
+            if not owned:
+                return []
+            with self._registry_lock:
+                index = self.indices.get(corpus_id, {}).get(index_type)
+                new = index is None
+                if new:
+                    index = self._new_index(index_type)
+                    retriever = self._new_retriever(index_type, index)
+                identifiers = index.insert_nodes(owned)
+                if new:
+                    self.indices.setdefault(corpus_id, {})[index_type] = index
+                    self.retrievers.setdefault(corpus_id, {})[index_type] = retriever
+            return identifiers
+        except Exception as error:
+            logger.error(f"Failed to add nodes to {index_type} in corpus {corpus_id}: {error}")
             return []
 
     def delete(self, corpus_id: str, index_type: Optional[str] = None, 
@@ -225,34 +248,35 @@ class RAGEngine:
             Exception: If deletion fails.
         """
         try:
-            if corpus_id not in self.indices:
-                logger.warning(f"No indices found for corpus {corpus_id}")
-                return
+            with self._registry_lock:
+                if corpus_id not in self.indices:
+                    logger.warning(f"No indices found for corpus {corpus_id}")
+                    return
 
-            target_indices = [index_type] if index_type else self.indices[corpus_id].keys()
-            for idx_type in list(target_indices):  # Use list to avoid runtime modification issues
-                if idx_type not in self.indices[corpus_id]:
-                    logger.warning(f"Index type {idx_type} not found for corpus {corpus_id}")
-                    continue
+                target_indices = [index_type] if index_type is not None else self.indices[corpus_id].keys()
+                for idx_type in list(target_indices):  # Use list to avoid runtime modification issues
+                    if idx_type not in self.indices[corpus_id]:
+                        logger.warning(f"Index type {idx_type} not found for corpus {corpus_id}")
+                        continue
 
-                index = self.indices[corpus_id][idx_type]
-                if node_ids or metadata_filters:
-                    # Convert single node_id to list for consistency
-                    node_ids_list = [node_ids] if isinstance(node_ids, str) else node_ids
-                    index.delete_nodes(node_ids=node_ids_list, metadata_filters=metadata_filters)
-                    logger.info(f"Deleted nodes from {idx_type} index for corpus {corpus_id}")
-                else:
-                    # Delete entire index
-                    index.clear()
-                    del self.indices[corpus_id][idx_type]
-                    del self.retrievers[corpus_id][idx_type]
-                    logger.info(f"Deleted entire {idx_type} index for corpus {corpus_id}")
+                    index = self.indices[corpus_id][idx_type]
+                    if node_ids is not None or metadata_filters is not None:
+                        # Convert single node_id to list for consistency
+                        node_ids_list = [node_ids] if isinstance(node_ids, str) else node_ids
+                        index.delete_nodes(node_ids=node_ids_list, metadata_filters=metadata_filters)
+                        logger.info(f"Deleted nodes from {idx_type} index for corpus {corpus_id}")
+                    else:
+                        # Delete entire index
+                        index.clear()
+                        del self.indices[corpus_id][idx_type]
+                        del self.retrievers[corpus_id][idx_type]
+                        logger.info(f"Deleted entire {idx_type} index for corpus {corpus_id}")
 
-            # Clean up corpus if no indices remain
-            if not self.indices[corpus_id]:
-                del self.indices[corpus_id]
-                del self.retrievers[corpus_id]
-                logger.info(f"Removed empty corpus {corpus_id}")
+                # Clean up corpus if no indices remain
+                if not self.indices[corpus_id]:
+                    del self.indices[corpus_id]
+                    del self.retrievers[corpus_id]
+                    logger.info(f"Removed empty corpus {corpus_id}")
 
         except Exception as e:
             logger.error(f"Failed to delete from corpus {corpus_id}, index {index_type}: {str(e)}")
@@ -268,332 +292,167 @@ class RAGEngine:
             Exception: If clearing fails.
         """
         try:
-            target_corpora = [corpus_id] if corpus_id else list(self.indices.keys())
-            for cid in target_corpora:
-                if cid not in self.indices:
-                    logger.warning(f"No indices found for corpus {cid}")
-                    continue
+            with self._registry_lock:
+                target_corpora = [corpus_id] if corpus_id is not None else list(self.indices.keys())
+                for cid in target_corpora:
+                    if cid not in self.indices:
+                        logger.warning(f"No indices found for corpus {cid}")
+                        continue
 
-                for idx_type in list(self.indices[cid].keys()):
-                    index = self.indices[cid][idx_type]
-                    index.clear()
-                    del self.indices[cid][idx_type]
-                    del self.retrievers[cid][idx_type]
-                    logger.info(f"Cleared {idx_type} index for corpus {cid}")
+                    for idx_type in list(self.indices[cid].keys()):
+                        index = self.indices[cid][idx_type]
+                        index.clear()
+                        del self.indices[cid][idx_type]
+                        del self.retrievers[cid][idx_type]
+                        logger.info(f"Cleared {idx_type} index for corpus {cid}")
 
-                # Clean up corpus if no indices remain
-                del self.indices[cid]
-                del self.retrievers[cid]
-                logger.info(f"Cleared corpus {cid}")
+                    # Clean up corpus if no indices remain
+                    del self.indices[cid]
+                    del self.retrievers[cid]
+                    logger.info(f"Cleared corpus {cid}")
 
         except Exception as e:
             logger.error(f"Failed to clear indices for corpus {corpus_id or 'all'}: {str(e)}")
             raise
 
-    def save(self, output_path: Optional[str] = None, corpus_id: Optional[str] = None, 
-                index_type: Optional[str] = None, table: Optional[str] = None, 
-                graph_exported: bool = False) -> None:
-        """Save indices to files or database.
-
-        Serializes corpus chunks to JSONL files and metadata to JSON files if output_path is provided,
-        or saves to the SQLite database via StorageHandler if output_path is None.
-
-        Args:
-            output_path (Optional[str]): Directory to save JSONL and JSON files. If None, saves to database.
-            corpus_id (Optional[str]): Specific corpus to save. If None, saves all corpora.
-            index_type (Optional[str]): Specific index type to save. If None, saves all indices.
-            table (Optional[str]): Database table name for index data. Defaults to 'indexing' if None.
-            graph_exported (bool): If True, export graph nodes and relations for graph indices. Defaults to False.
-
-        Raises:
-            Exception: If saving fails or file operations encounter errors.
-        """
-        try:
-            target_corpora = [corpus_id] if corpus_id else list(self.indices.keys())
-            table = table or "indexing"
-
-            for cid in target_corpora:
-                if cid not in self.indices:
-                    logger.warning(f"No indices found for corpus {cid}")
+    def _index_snapshots(self, corpus_id, index_type, graph_exported):
+        """Capture detached committed data for exactly the selected indices."""
+        with self._registry_lock:
+            selected = [
+                (cid, kind, index)
+                for cid, indices in self.indices.items()
+                if corpus_id is None or cid == corpus_id
+                for kind, index in indices.items()
+                if index_type is None or kind == index_type
+            ]
+        for cid, kind, index in selected:
+            if kind == IndexType.GRAPH:
+                if not graph_exported:
                     continue
+                index.build_kv_store()
+            nodes = index.snapshot_nodes() if hasattr(index, "snapshot_nodes") else list(index.id_to_node.values())
+            corpus = Corpus.from_llama_nodes(nodes)
+            corpus.corpus_id = cid
+            vector = self.storage_handler.storageConfig.vectorConfig
+            graph = self.storage_handler.storageConfig.graphConfig
+            metadata = IndexMetadata(
+                corpus_id=cid,
+                index_type=kind,
+                dimension=self.embed_model.dimensions,
+                vector_db_type=vector.vector_name if vector else None,
+                graph_db_type=graph.graph_name if graph else None,
+                embedding_model_name=self.config.embedding.model_name,
+                collection_name=vector.qdrant_collection_name if vector else None,
+                date=str(datetime.now()),
+            )
+            yield IndexSnapshot(metadata=metadata, corpus=corpus)
 
-                target_indices = [index_type] if index_type and index_type in self.indices[cid] else self.indices[cid].keys()
-                for idx_type in target_indices:
-                    index = self.indices[cid][idx_type]
+    def save(self, output_path: Optional[str] = None, corpus_id: Optional[str] = None,
+             index_type: Optional[str] = None, table: Optional[str] = None,
+             graph_exported: bool = False) -> None:
+        """Save committed snapshots to portable files or the configured database.
 
-                    # Skip saving for graph indices unless graph_exported is True
-                    if idx_type == IndexType.GRAPH and not graph_exported:
-                        logger.warning(f"Skipping save for graph index {idx_type} in corpus {cid} as graph_exported is False")
-                        continue
-
-                    # For graph indices, include kg_nodes and kg_rels if graph_exported is True
-                    if idx_type == IndexType.GRAPH and graph_exported:
-                        index.build_kv_store()  # FIXME: Computer's memory may increase dramatically
-
-                    # Convert index nodes to Corpus
-                    chunks = [
-                        self.chunk_class.from_llama_node(node_data)
-                        for node_id, node_data in index.id_to_node.items()
-                    ]
-                    corpus = Corpus(chunks=chunks, corpus_id=cid)
-
-                    # Prepare metadata
-                    vector_config = self.storage_handler.storageConfig.vectorConfig.model_dump() if self.storage_handler.storageConfig.vectorConfig else {}
-                    graph_config = self.storage_handler.storageConfig.graphConfig.model_dump() if self.storage_handler.storageConfig.graphConfig else {}
-                    metadata = IndexMetadata(
-                        corpus_id=cid,
-                        index_type=idx_type,
-                        collection_name=vector_config.get("qdrant_collection_name", "default_collection"),
-                        dimension=self.embed_model.dimensions,
-                        vector_db_type=vector_config.get("vector_name", None),
-                        graph_db_type=graph_config.get("graph_name", None),
-                        embedding_model_name=self.config.embedding.model_name,
-                        date=str(datetime.now()),
-                    )
-
-                    if output_path:
-                        # File-based saving
-                        os.makedirs(output_path, exist_ok=True)
-                        safe_cid = "".join(c if c.isalnum() or c in ["-", "_"] else "_" for c in cid)
-                        safe_idx_type = "".join(c if c.isalnum() or c in ["-", "_"] else "_" for c in idx_type)
-                        nodes_file = os.path.join(output_path, f"{safe_cid}_{safe_idx_type}_nodes.jsonl")
-                        metadata_file = os.path.join(output_path, f"{safe_cid}_{safe_idx_type}_metadata.json")
-
-                        # Save corpus as JSONL
-                        corpus.to_jsonl(nodes_file, indent=0)
-                        logger.info(f"Saved {len(corpus.chunks)} chunks to {nodes_file}")
-
-                        # Save metadata as JSON
-                        with open(metadata_file, "w", encoding="utf-8") as f:
-                            json.dump(metadata.model_dump(), f, indent=2, ensure_ascii=False)
-                        logger.info(f"Saved metadata to {metadata_file}")
-                    else:
-                        # Database saving
-                        index_data = {
-                            "corpus_id": cid,
-                            "content": corpus.model_dump(),
-                            "date": str(datetime.now()),
-                            "metadata": metadata.model_dump()
-                        }
-                        self.storage_handler.save_index(index_data, table=table)
-                        logger.info(f"Saved {idx_type} index with {len(corpus.chunks)} chunks for corpus {cid} to database table {table}")
-
-        except Exception as e:
-            logger.error(f"Failed to save indices for corpus {corpus_id or 'all'}: {str(e)}")
-            raise
-
-    def load(self, source: Optional[str] = None, corpus_id: Optional[str] = None, 
-             index_type: Optional[str] = None, table: Optional[str] = None) -> None:
-        """Load indices from files or database.
-
-        Reconstructs indices and retrievers from JSONL/JSON files or SQLite database records.
-        Validates the embedding model name and dimension before reinitializing the embedding model.
-
-        Args:
-            source (Optional[str]): Directory containing JSONL/JSON files. If None, loads from database.
-            corpus_id (Optional[str]): Specific corpus to load. If None, loads all corpora.
-            index_type (Optional[str]): Specific index type to load. If None, loads all indices.
-            table (Optional[str]): Database table name for index data. Defaults to 'indexing' if None.
-
-        Returns:
-            The Sequence with id of loaded chunk.
-        
-        Raises:
-            Exception: If loading fails due to file or database errors, invalid data, or unsupported embedding model/dimension.
-        
-        Warning:
-            Try to call this function may cause some Bugs, when you load the nodes from file or database storage systems at twice. 
-            Because All the indexing share the same storage backend from storageHandler.
-            For example:
-            The vector database (.e.g Faiss) can insert again, even thougt there is a same node.
+        File metadata is published after immutable content, with a checksum and
+        the original logical corpus identity. Database rows retain all saved
+        index types in a corpus, including types not selected by this call.
         """
-        try:
-            table = table or "indexing"
-            config_dimension = self.storage_handler.storageConfig.vectorConfig.dimensions
-            loaded_chunk_ids: List[str] = []
-
-            if source:
-                # File-based loading
-                if not os.path.exists(source):
-                    logger.error(f"Source directory {source} does not exist")
-                    raise FileNotFoundError(f"Source directory {source} does not exist")
-
-                for file_name in os.listdir(source):
-                    if not file_name.endswith("_metadata.json"):
-                        continue
-                    parts = file_name.split("_")
-                    if len(parts) < 3:
-                        logger.warning(f"Skipping invalid metadata file: {file_name}")
-                        continue
-                    cid = "_".join(parts[:-2])
-                    idx_type = parts[-2]
-                    
-                    if (corpus_id and corpus_id != cid) or (index_type and index_type != idx_type):
-                        continue
-
-                    metadata_file = os.path.join(source, file_name)
-                    nodes_file = os.path.join(source, f"{cid}_{idx_type}_nodes.jsonl")
-
-                    # Load metadata
-                    with open(metadata_file, "r", encoding="utf-8") as f:
-                        metadata = IndexMetadata.model_validate(json.load(f))
-
-                    # Validate embedding model
-                    if not self.embed_model.validate_model(self.config.embedding.provider, metadata.embedding_model_name):
-                        raise ValueError(
-                            f"Embedding model '{metadata.embedding_model_name}' is not supported by provider '{self.config.embedding.provider}'. "
-                            f"Supported models: {EmbeddingProvider.SUPPORTED_MODELS.get(self.config.embedding.provider, [])}"
-                        )
-
-                    # Validate dimension
-                    if metadata.dimension != config_dimension:
-                        raise ValueError(
-                            f"Embedding dimension {metadata.dimension} in metadata does not match configured dimension {config_dimension}."
-                        )
-
-                    # Load corpus
-                    if not os.path.exists(nodes_file):
-                        logger.warning(f"Nodes file {nodes_file} not found for metadata {metadata_file}")
-                        continue
-                    corpus = Corpus.from_jsonl(nodes_file, corpus_id=cid)
-
-                    # Reinitialize embedding model if needed
-                    if metadata.embedding_model_name != self.config.embedding.model_name:
-                        logger.info(f"Reinitializing embedding model to {metadata.embedding_model_name}")
-                        self.embed_model = self.embedding_factory.create(
-                            provider=self.config.embedding.provider,
-                            model_config=self.config.embedding.model_dump(exclude_unset=True)
-                        )
-
-                    # Load index
-                    chunk_ids = self._load_index(corpus, cid, idx_type)
-                    loaded_chunk_ids.extend(chunk_ids)
-                    logger.info(f"Loaded {idx_type} index with {len(corpus.chunks)} chunks for corpus {cid} from {nodes_file}")
+        for snapshot in self._index_snapshots(corpus_id, index_type, graph_exported):
+            if output_path is not None:
+                save_file_snapshot(snapshot, output_path)
             else:
-                # Database loading
-                records = self.storage_handler.load(tables=[table]).get(table, [])
+                self.storage_handler.save_index(snapshot.to_record(), table=table or "indexing")
 
-                if not records:
-                    logger.warning(f"No records found in table {table}")
-                    return
+    def _validate_snapshot(self, snapshot: IndexSnapshot) -> None:
+        """Reject incompatible data before modifying any live vector index."""
+        metadata = snapshot.metadata
+        IndexType(metadata.index_type)
+        if metadata.index_type != IndexType.VECTOR:
+            return
+        vector = self.storage_handler.storageConfig.vectorConfig
+        if vector is None:
+            raise ValueError("Loading vector snapshots requires a vector backend")
+        if metadata.dimension != vector.dimensions:
+            raise ValueError(
+                f"Embedding dimension {metadata.dimension} does not match configured dimension {vector.dimensions}"
+            )
+        if metadata.embedding_model_name != self.config.embedding.model_name:
+            raise ValueError(
+                f"Snapshot embedding model {metadata.embedding_model_name!r} does not match "
+                f"configured model {self.config.embedding.model_name!r}; configure an engine for the saved model"
+            )
+        if not self.embed_model.validate_model(self.config.embedding.provider, metadata.embedding_model_name):
+            raise ValueError(f"Snapshot embedding model {metadata.embedding_model_name!r} is not supported")
+        if metadata.vector_db_type is not None and metadata.vector_db_type != vector.vector_name:
+            raise ValueError("Snapshot vector backend does not match the configured backend")
+        expected_image = self.config.modality == "multimodal"
+        if any(isinstance(chunk, ImageChunk) != expected_image for chunk in snapshot.corpus.chunks):
+            raise ValueError("Snapshot chunk modality does not match the configured engine")
 
-                for record in records:
-                    parsed = self.storage_handler.parse_result(record, IndexStore)
-                    cid = parsed["corpus_id"]
-                    idx_type = parsed["metadata"]["index_type"]
-                    if (corpus_id and corpus_id != cid) or (index_type and index_type != idx_type):
-                        continue
+    def load(self, source: Optional[str] = None, corpus_id: Optional[str] = None,
+             index_type: Optional[str] = None, table: Optional[str] = None) -> Sequence[str]:
+        """Replace selected vector indices with validated, isolated snapshots.
 
-                    # Reconstruct corpus
-                    chunks = []
-                    for chunk_data in parsed["content"]["chunks"]:
-                        metadata = ChunkMetadata.model_validate(chunk_data["metadata"])
-                        
-                        if self.config.modality == "multimodal":
-                            # Create ImageChunk for multimodal mode
-                            chunk = ImageChunk(
-                                chunk_id=chunk_data["chunk_id"],
-                                image_path=chunk_data["image_path"],
-                                image_mimetype=chunk_data.get("image_mimetype"),
-                                metadata=metadata,
-                                embedding=chunk_data["embedding"],
-                                excluded_embed_metadata_keys=chunk_data["excluded_embed_metadata_keys"],
-                                excluded_llm_metadata_keys=chunk_data["excluded_llm_metadata_keys"],
-                                relationships={k: RelatedNodeInfo(**v) for k, v in chunk_data["relationships"].items()}
-                            )
-                        else:
-                            # Create TextChunk for text mode
-                            chunk = TextChunk(
-                                chunk_id=chunk_data["chunk_id"],
-                                text=chunk_data["text"],
-                                metadata=metadata,
-                                embedding=chunk_data["embedding"],
-                                start_char_idx=chunk_data["start_char_idx"],
-                                end_char_idx=chunk_data["end_char_idx"],
-                                excluded_embed_metadata_keys=chunk_data["excluded_embed_metadata_keys"],
-                                excluded_llm_metadata_keys=chunk_data["excluded_llm_metadata_keys"],
-                                relationships={k: RelatedNodeInfo(**v) for k, v in chunk_data["relationships"].items()}
-                            )
-                        chunks.append(chunk)
-                    
-                    corpus = Corpus(
-                        chunks=chunks,
-                        corpus_id=cid,
-                        metadata=IndexMetadata.model_validate(parsed["metadata"])
-                    )
-
-                    # Validate embedding model
-                    metadata = IndexMetadata.model_validate(parsed["metadata"])
-                    if not self.embed_model.validate_model(self.config.embedding.provider, metadata.embedding_model_name):
-                        raise ValueError(
-                            f"Embedding model '{metadata.embedding_model_name}' is not supported by provider '{self.config.embedding.provider}'. "
-                            f"Supported models: {EmbeddingProvider.SUPPORTED_MODELS.get(self.config.embedding.provider, [])}"
-                        )
-
-                    # Validate dimension
-                    if metadata.dimension != config_dimension:
-                        raise ValueError(
-                            f"Embedding dimension {metadata.dimension} in metadata does not match configured dimension {config_dimension}."
-                        )
-
-                    # Reinitialize embedding model if needed
-                    if metadata.embedding_model_name != self.config.embedding.model_name:
-                        logger.info(f"Reinitializing embedding model to {metadata.embedding_model_name}")
-                        self.embed_model = self.embedding_factory.create(
-                            provider=self.config.embedding.provider,
-                            model_config=self.config.embedding.model_dump(exclude_unset=True)
-                        )
-
-                    # Load index
-                    chunk_ids = self._load_index(corpus, cid, idx_type)
-                    loaded_chunk_ids.extend(chunk_ids)
-                    logger.info(f"Loaded {idx_type} index with {len(corpus.chunks)} chunks for corpus {cid} from database table {table}")
-            
-            return loaded_chunk_ids
-        except Exception as e:
-            logger.error(f"Failed to load indices: {str(e)}")
-            raise
+        Repeated loading is idempotent and removes nodes absent from the saved
+        snapshot. All selected vector indices are prepared before publication;
+        a parsing, compatibility, embedding or backend failure leaves the live
+        registry untouched. Other corpora and unselected index types are kept.
+        Legacy JSONL/metadata pairs and single-index DB rows remain readable.
+        """
+        if source is not None:
+            snapshots = list(load_file_snapshots(source, corpus_id, index_type))
+        else:
+            snapshots = []
+            records = self.storage_handler.load(tables=[table or "indexing"]).get(table or "indexing", [])
+            for record in records:
+                parsed = self.storage_handler.parse_result(record, IndexStore)
+                if corpus_id is not None and parsed["corpus_id"] != corpus_id:
+                    continue
+                for single in expand_index_record(parsed):
+                    if index_type is None or single["metadata"].get("index_type") == index_type:
+                        snapshots.append(snapshot_from_record(single))
+        seen = set()
+        for snapshot in snapshots:
+            self._validate_snapshot(snapshot)
+            identity = (snapshot.metadata.corpus_id, snapshot.metadata.index_type)
+            if identity in seen:
+                raise ValueError(f"Multiple snapshots found for {identity}")
+            seen.add(identity)
+        prepared = []
+        identifiers = []
+        for snapshot in snapshots:
+            cid, kind = snapshot.metadata.corpus_id, snapshot.metadata.index_type
+            if kind == IndexType.VECTOR:
+                index = self._new_index(kind)
+                retriever = self._new_retriever(kind, index)
+                owned = self._owned_nodes(snapshot.corpus, cid, kind)
+                loaded = index.load(owned)
+                if len(loaded) != len(owned):
+                    raise RuntimeError(f"Incomplete snapshot ingestion for corpus {cid}")
+                prepared.append((cid, kind, index, retriever))
+                identifiers.extend(loaded)
+            else:
+                # Graph persistence has its own external backend lifecycle.
+                # Retain that path without promising vector-style rollback.
+                identifiers.extend(self._load_index(snapshot.corpus, cid, kind))
+        with self._registry_lock:
+            for cid, kind, index, retriever in prepared:
+                self.indices.setdefault(cid, {})[kind] = index
+                self.retrievers.setdefault(cid, {})[kind] = retriever
+        return identifiers
 
     def _load_index(self, corpus: Corpus, corpus_id: str, index_type: str) -> Sequence[str]:
-        """Helper method to load an index and its retriever."""
-        try:
-            if corpus_id not in self.indices:
-                self.indices[corpus_id] = {}
-                self.retrievers[corpus_id] = {}
-
-            if index_type not in self.indices[corpus_id]:
-                index = self.index_factory.create(
-                    index_type=index_type,
-                    embed_model=self.embed_model.get_embedding_model(),
-                    storage_handler=self.storage_handler,
-                    index_config=self.config.index.model_dump(exclude_unset=True) if self.config.index else {},
-                    llm=self.llm
-                )
-                self.indices[corpus_id][index_type] = index
-                retriever_type = RetrieverType.GRAPH if index_type == IndexType.GRAPH else RetrieverType.VECTOR
-                self.retrievers[corpus_id][index_type] = self.retriever_factory.create(
-                    retriever_type=retriever_type,
-                    llm=self.llm,
-                    index=index.get_index(),
-                    graph_store=index.get_index().storage_context.graph_store,
-                    embed_model=self.embed_model.get_embedding_model(),
-                    query=Query(query_str="", top_k=self.config.retrieval.top_k if self.config.retrieval else 5),
-                    storage_handler=self.storage_handler,
-                    chunk_class=self.chunk_class
-
-                )
-
-            nodes = corpus.to_llama_nodes()
-           
-            for node in nodes:
-                node.metadata.update({"corpus_id": corpus_id, "index_type": index_type})
-           
-            chunk_ids = self.indices[corpus_id][index_type].load(nodes)
-            logger.info(f"Inserted {len(nodes)} nodes into {index_type} index for corpus {corpus_id}")
-            return chunk_ids
-        except Exception as e:
-            logger.error(f"Failed to load index for corpus {corpus_id}, index_type {index_type}: {str(e)}")
-            raise
+        """Load one index; vector snapshots replace rather than append data."""
+        with self._registry_lock:
+            index = self.indices.get(corpus_id, {}).get(index_type)
+            if index_type == IndexType.VECTOR or index is None:
+                index = self._new_index(index_type)
+                retriever = self._new_retriever(index_type, index)
+            else:
+                retriever = self.retrievers[corpus_id][index_type]
+            loaded = index.load(self._owned_nodes(corpus, corpus_id, index_type))
+            self.indices.setdefault(corpus_id, {})[index_type] = index
+            self.retrievers.setdefault(corpus_id, {})[index_type] = retriever
+            return loaded
 
     async def aget(self, corpus_id: str, index_type: str, node_ids: List[str]) -> List[Union[TextChunk, ImageChunk]]:
         """Retrieve chunks by node_ids from the index."""
@@ -636,26 +495,32 @@ class RAGEngine:
                     query = t(query)
 
             results = []
-            target_corpora = [corpus_id] if corpus_id else self.indices.keys()
-
-            # Create all retrieval tasks
+            # Capture references before awaiting. A concurrent snapshot load can
+            # then publish a new registry while these requests finish against
+            # their original, internally consistent corpus-owned indices.
+            with self._registry_lock:
+                selected = [
+                    (cid, kind, retriever)
+                    for cid, retrievers in self.retrievers.items()
+                    if corpus_id is None or cid == corpus_id
+                    for kind, retriever in retrievers.items()
+                ]
             tasks = []
-            for cid in target_corpora:
-                for idx_type, retriever in self.retrievers[cid].items():
-                    if query.metadata_filters and query.metadata_filters.get("index_type") and \
-                    query.metadata_filters["index_type"] != idx_type:
-                        continue
-                    
-                    task = retriever.aretrieve(
-                        Query(
-                            query_str=query.query_str,
-                            top_k=query.top_k or self.config.retrieval.top_k,
-                            similarity_cutoff=query.similarity_cutoff,
-                            keyword_filters=query.keyword_filters,
-                            metadata_filters=query.metadata_filters
-                        )
+            for cid, idx_type, retriever in selected:
+                if query.metadata_filters and query.metadata_filters.get("index_type") and \
+                        query.metadata_filters["index_type"] != idx_type:
+                    continue
+                task = retriever.aretrieve(
+                    Query(
+                        query_str=query.query_str,
+                        top_k=query.top_k if query.top_k is not None else self.config.retrieval.top_k,
+                        custom_embedding_strs=query.custom_embedding_strs,
+                        similarity_cutoff=query.similarity_cutoff,
+                        keyword_filters=query.keyword_filters,
+                        metadata_filters=query.metadata_filters,
                     )
-                    tasks.append((task, cid, idx_type))
+                )
+                tasks.append((task, cid, idx_type))
 
             # Run all retrievals concurrently
             retrieval_tasks = [task for task, _, _ in tasks]

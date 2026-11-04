@@ -362,14 +362,20 @@ if __name__ == "__main__":
 |--------|-------------|------------|--------------|
 | `__init__` | Initializes the RAGEngine with RAG and storage configurations. | `config: RAGConfig`, `storage_handler: StorageHandler` | None |
 | `read` | Loads and chunks documents into a corpus. | `file_paths`, `exclude_files`, `filter_file_by_suffix`, `merge_by_file`, `show_progress`, `corpus_id` | `Corpus` |
-| `add` | Adds nodes to an index for a specific corpus. | `index_type`, `nodes`, `corpus_id` | None |
+| `add` | Adds nodes to an index for a specific corpus. | `index_type`, `nodes`, `corpus_id` | Inserted chunk IDs; `[]` on failure |
 | `delete` | Deletes nodes or an entire index from a corpus. | `corpus_id`, `index_type`, `node_ids`, `metadata_filters` | None |
 | `clear` | Clears indices for a specific corpus or all corpora. | `corpus_id` | None |
 | `save` | Saves indices to files or a database. | `output_path`, `corpus_id`, `index_type`, `table` | None |
-| `load` | Loads indices from files or a database. | `source`, `corpus_id`, `index_type`, `table` | None |
+| `load` | Loads indices from files or a database. | `source`, `corpus_id`, `index_type`, `table` | Loaded chunk IDs |
 | `query` | Executes a query and returns processed results. | `query`, `corpus_id`, `query_transforms` | `RagResult` |
 
 ## Notes
 - **Query Transforms**: The `query` method supports optional query transforms for preprocessing, which can be customized to enhance retrieval (e.g., HyDE, query decomposition).
 - **Storage Backend**: Ensure `StorageHandler` is properly configured to handle vector and metadata storage.
-- **Warning**: Loading indices multiple times may cause issues (e.g., duplicate node insertion in vector stores). Clear indices before reloading.
+- **Corpus ownership**: Each vector index has its own FAISS backend. Chunk IDs may repeat across corpora; querying, updating or deleting one corpus does not affect another. `add(nodes=corpus, ...)` uses the corpus's ID unless an explicit `corpus_id` is supplied.
+- **Batch updates**: A repeated chunk ID replaces its prior value; within one batch the final value wins. Embedding or storage failures preserve the previous vector index. Direct `VectorIndexing.insert_nodes` callers receive the error, while `RAGEngine.add` retains its `[]` failure result. Batch related updates to reduce LlamaIndex catalog serialization overhead.
+- **Snapshot replacement**: Loading a vector snapshot replaces the selected index, including removal of nodes absent from the snapshot. Repeated loads are safe. Configure the same embedding model, dimensions and modality as the saved data; incompatible snapshots fail before replacing live vector indices.
+- **Portable files**: New snapshots use a metadata pointer, immutable JSONL content and a checksum. Keep the referenced files together. Older JSONL/metadata pairs remain readable; saving into their directory upgrades the selected snapshot. Prior content generations remain available for readers already using them, so repeated saves can grow the directory.
+- **Database snapshots**: Multiple index types share a versioned payload in the existing corpus row. Saving one type preserves the others, and legacy single-index rows need no schema migration. `StorageHandler.load_index(..., index_type="vector")` selects one payload.
+- **Deletion selectors**: Omitting both node selectors deletes the selected index. Explicit empty node IDs or metadata filters select no nodes; an empty corpus selector does not clear all corpora.
+- **Graph persistence**: Graph indices retain their external backend lifecycle; the vector rollback guarantees do not imply a distributed transaction with a graph database.
