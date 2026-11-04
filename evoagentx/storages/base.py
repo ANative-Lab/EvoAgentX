@@ -1,15 +1,17 @@
 import os
 import json
+from copy import deepcopy
+from threading import RLock
 from typing import List, Dict, Any, Optional, Union
 
-from pydantic import Field
+from pydantic import Field, PrivateAttr
 
 from ..core.module import BaseModule
 from .storages_config import StoreConfig
 from .db_stores import DBStoreBase, DBStoreFactory
 from .graph_stores import GraphStoreFactory, GraphStoreBase
 from .vectore_stores import VectorStoreFactory, VectorStoreBase
-from .schema import TableType, AgentStore, WorkflowStore, MemoryStore, HistoryStore, IndexStore
+from .schema import TableType, AgentStore, WorkflowStore, MemoryStore, HistoryStore, IndexStore, expand_index_record
 
 
 class StorageHandler(BaseModule):
@@ -23,6 +25,8 @@ class StorageHandler(BaseModule):
     storageDB: Optional[Union[DBStoreBase, Any]] = Field(None, description="Database storage backend")
     vector_store: Optional[Union[VectorStoreBase, Any]] = Field(None, description="Single vector storage backend")
     graph_store: Optional[Union[GraphStoreBase, Any]] = Field(None, description="Optional graph storage backend")
+
+    _index_lock: Any = PrivateAttr(default_factory=RLock)
 
     def init_module(self):
         """
@@ -326,19 +330,62 @@ class StorageHandler(BaseModule):
         else:
             self.storageDB.insert(metadata=history_data, store_type="history", table=table)
 
-    def load_index(self, corpus_id: str, table: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        result = self.storageDB.get_by_id(corpus_id, store_type="indexing", table=table)
-        if result is not None:
-            result = self.parse_result(result, IndexStore)
+    def load_index(
+        self, corpus_id: str, table: Optional[str] = None,
+        index_type: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Load a corpus row, optionally selecting one index from its snapshots.
 
-        return result
+        Existing single-index rows remain readable without migration. An
+        unfiltered call returns the stored row, including an aggregate when
+        several index types share the corpus primary key.
+        """
+        table = table or TableType.store_indexing.value
+        with self._index_lock:
+            result = self.storageDB.get_by_id(corpus_id, store_type="indexing", table=table)
+            if result is None:
+                return None
+            result = self.parse_result(result, IndexStore)
+            if index_type is None:
+                return result
+            return next(
+                (record for record in expand_index_record(result)
+                 if record.get("metadata", {}).get("index_type") == index_type),
+                None,
+            )
 
     def save_index(self, index_data: Dict[str, Any], table: Optional[str] = None):
-        corpus_id = index_data.get("corpus_id")
+        """Upsert one index without overwriting other types in the same corpus.
+
+        A single index retains the legacy row format. When a second type is
+        saved, both payloads are stored in a versioned content envelope using
+        the existing corpus_id primary key and columns. Updating one type
+        preserves the other snapshots, including those not loaded by an engine.
+        """
+        table = table or TableType.store_indexing.value
+        data = IndexStore.model_validate(deepcopy(index_data)).model_dump()
+        corpus_id = data["corpus_id"]
         if not corpus_id:
-            raise ValueError("Index data must include an 'corpus_id' field")
-        existing = self.storageDB.get_by_id(corpus_id, store_type="indexing", table=table)
-        if existing:
-            self.storageDB.update(corpus_id, new_metadata=index_data, store_type="indexing", table=table)
-        else:
-            self.storageDB.insert(metadata=index_data, store_type="indexing", table=table)
+            raise ValueError("Index data must include a nonempty corpus_id")
+        index_type = data["metadata"].get("index_type")
+        with self._index_lock:
+            existing = self.load_index(corpus_id, table=table)
+            if existing is not None and index_type is not None:
+                records = {
+                    record["metadata"].get("index_type"): record
+                    for record in expand_index_record(existing)
+                }
+                records[index_type] = data
+                if len(records) > 1:
+                    data = {
+                        "corpus_id": corpus_id,
+                        "content": {"indices": records},
+                        "metadata": {"snapshot_format": 2},
+                        "date": data["date"],
+                    }
+            elif existing is not None and existing.get("metadata", {}).get("snapshot_format") == 2:
+                raise ValueError("index_type is required to update an aggregate snapshot")
+            if existing is None:
+                self.storageDB.insert(metadata=data, store_type="indexing", table=table)
+            else:
+                self.storageDB.update(corpus_id, new_metadata=data, store_type="indexing", table=table)
