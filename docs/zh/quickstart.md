@@ -107,7 +107,8 @@ workflow_graph: WorkFlowGraph = wf_generator.generate_workflow(goal=goal)
 
 可选：可视化或保存生成的工作流：
 ```python
-# 可视化工作流结构（可选）
+# 可视化工作流且不阻塞后续步骤（可选）。
+# 运行过程中节点颜色会更新。使用 display(block=True) 会等待窗口关闭。
 workflow_graph.display()
 
 # 将工作流保存为 JSON 文件（可选）

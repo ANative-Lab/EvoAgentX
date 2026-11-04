@@ -109,7 +109,8 @@ workflow_graph: WorkFlowGraph = wf_generator.generate_workflow(goal=goal)
 
 You can optionally **visualize** or **save** the generated workflow:
 ```python
-# Visualize the workflow structure (optional)
+# Visualize the workflow without blocking later steps (optional).
+# Node colors update while the workflow runs. Use display(block=True) to wait.
 workflow_graph.display()
 
 # Save the workflow to a JSON file (optional)
