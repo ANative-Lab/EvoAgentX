@@ -443,3 +443,108 @@ def test_failed_file_publication_keeps_previous_snapshot(engine, tmp_path):
             engine.save(output_path=str(directory))
     assert engine.load(source=str(directory)) == ["a"]
     assert contents(engine, "a") == ["saved"]
+
+
+def test_unrelated_async_query_and_heartbeat_finish_before_ingestion_is_released(engine):
+    from threading import Event, Thread, Timer
+    engine.add("vector", [node("old", "query me")], corpus_id="existing")
+    started, release = Event(), Event()
+    original_embedding = engine.embed_model.model._get_text_embedding
+    inserted = []
+
+    def delayed_embedding(text):
+        started.set()
+        if not release.wait(5):
+            raise RuntimeError("embedding watchdog expired")
+        return original_embedding(text)
+
+    def ingest():
+        inserted.extend(engine.add("vector", [TextNode(id_="new", text="slow embedding")], corpus_id="other"))
+
+    async def proof():
+        async def heartbeat():
+            await asyncio.sleep(0.01)
+            return not release.is_set()
+
+        heartbeat_task = asyncio.create_task(heartbeat())
+        await asyncio.sleep(0)
+        result = await engine.query_async("lookup", corpus_id="existing")
+        query_finished_before_release = not release.is_set()
+        heartbeat_finished_before_release = await heartbeat_task
+        return result, query_finished_before_release, heartbeat_finished_before_release
+
+    with patch.object(engine.embed_model.model, "_get_text_embedding", side_effect=delayed_embedding):
+        worker = Thread(target=ingest)
+        worker.start()
+        watchdog = Timer(3, release.set)
+        watchdog.start()
+        try:
+            assert started.wait(2)
+            result, query_progressed, heartbeat_progressed = asyncio.run(proof())
+        finally:
+            release.set()
+            watchdog.cancel()
+            worker.join(5)
+            watchdog.join(5)
+    assert not worker.is_alive()
+    assert [chunk.text for chunk in result.corpus.chunks] == ["query me"]
+    assert query_progressed, "Query could finish only after the blocked embedding was released"
+    assert heartbeat_progressed, "The query blocked an independent event-loop heartbeat"
+    assert inserted == ["new"]
+
+
+@pytest.mark.parametrize("operation", ["add", "delete", "clear", "load"])
+def test_lifecycle_writers_serialize_with_an_inflight_add(engine, operation):
+    from threading import Event, Thread
+    engine.add("vector", [node("old", "saved", 1)], corpus_id="a")
+    engine.save()
+    started, release, following_started = Event(), Event(), Event()
+    original_embedding = engine.embed_model.model._get_text_embedding
+    errors = []
+
+    def delayed_embedding(text):
+        started.set()
+        if not release.wait(5):
+            raise RuntimeError("embedding watchdog expired")
+        return original_embedding(text)
+
+    def ingest():
+        try:
+            engine.add("vector", [TextNode(id_="pending", text="slow embedding")], corpus_id="a")
+        except BaseException as error:
+            errors.append(error)
+
+    def following():
+        following_started.set()
+        try:
+            if operation == "add":
+                engine.add("vector", [node("second", "second", 2)], corpus_id="a")
+            elif operation == "delete":
+                engine.delete("a", "vector", node_ids="pending")
+            elif operation == "clear":
+                engine.clear()
+            else:
+                engine.load()
+        except BaseException as error:
+            errors.append(error)
+
+    with patch.object(engine.embed_model.model, "_get_text_embedding", side_effect=delayed_embedding):
+        first, second = Thread(target=ingest), Thread(target=following)
+        first.start()
+        try:
+            assert started.wait(2)
+            second.start()
+            assert following_started.wait(2)
+        finally:
+            release.set()
+            first.join(5)
+            if second.ident is not None:
+                second.join(5)
+    assert not first.is_alive() and not second.is_alive()
+    assert errors == []
+    if operation == "add":
+        assert contents(engine, "a") == ["saved", "second", "slow embedding"]
+    elif operation in ("delete", "load"):
+        assert contents(engine, "a") == ["saved"]
+    else:
+        assert engine.indices == {} and engine.retrievers == {}

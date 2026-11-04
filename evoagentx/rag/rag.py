@@ -29,7 +29,11 @@ class RAGEngine:
     def __init__(self, config: RAGConfig, storage_handler: StorageHandler, llm: Optional[BaseLLM] = None):
         self.config = config
         self.storage_handler = storage_handler
+        # Readers hold this only while capturing registry references. Lifecycle
+        # writers use a separate gate so slow embedding/backend calls cannot
+        # block an unrelated query's event loop during registry selection.
         self._registry_lock = RLock()
+        self._lifecycle_lock = RLock()
         self.embedding_factory = EmbeddingFactory()
         self.index_factory = IndexFactory()
         self.chunk_factory = ChunkFactory()
@@ -216,16 +220,18 @@ class RAGEngine:
             owned = self._owned_nodes(nodes, corpus_id, index_type)
             if not owned:
                 return []
-            with self._registry_lock:
-                index = self.indices.get(corpus_id, {}).get(index_type)
+            with self._lifecycle_lock:
+                with self._registry_lock:
+                    index = self.indices.get(corpus_id, {}).get(index_type)
                 new = index is None
                 if new:
                     index = self._new_index(index_type)
                     retriever = self._new_retriever(index_type, index)
                 identifiers = index.insert_nodes(owned)
                 if new:
-                    self.indices.setdefault(corpus_id, {})[index_type] = index
-                    self.retrievers.setdefault(corpus_id, {})[index_type] = retriever
+                    with self._registry_lock:
+                        self.indices.setdefault(corpus_id, {})[index_type] = index
+                        self.retrievers.setdefault(corpus_id, {})[index_type] = retriever
             return identifiers
         except Exception as error:
             logger.error(f"Failed to add nodes to {index_type} in corpus {corpus_id}: {error}")
@@ -248,72 +254,45 @@ class RAGEngine:
             Exception: If deletion fails.
         """
         try:
-            with self._registry_lock:
-                if corpus_id not in self.indices:
-                    logger.warning(f"No indices found for corpus {corpus_id}")
-                    return
-
-                target_indices = [index_type] if index_type is not None else self.indices[corpus_id].keys()
-                for idx_type in list(target_indices):  # Use list to avoid runtime modification issues
-                    if idx_type not in self.indices[corpus_id]:
-                        logger.warning(f"Index type {idx_type} not found for corpus {corpus_id}")
+            with self._lifecycle_lock:
+                with self._registry_lock:
+                    indices = self.indices.get(corpus_id)
+                    if indices is None:
+                        logger.warning(f"No indices found for corpus {corpus_id}")
+                        return
+                    kinds = [index_type] if index_type is not None else list(indices)
+                    selected = [(kind, indices.get(kind)) for kind in kinds]
+                for kind, index in selected:
+                    if index is None:
+                        logger.warning(f"Index type {kind} not found for corpus {corpus_id}")
                         continue
-
-                    index = self.indices[corpus_id][idx_type]
                     if node_ids is not None or metadata_filters is not None:
-                        # Convert single node_id to list for consistency
-                        node_ids_list = [node_ids] if isinstance(node_ids, str) else node_ids
-                        index.delete_nodes(node_ids=node_ids_list, metadata_filters=metadata_filters)
-                        logger.info(f"Deleted nodes from {idx_type} index for corpus {corpus_id}")
+                        identifiers = [node_ids] if isinstance(node_ids, str) else node_ids
+                        index.delete_nodes(node_ids=identifiers, metadata_filters=metadata_filters)
                     else:
-                        # Delete entire index
                         index.clear()
-                        del self.indices[corpus_id][idx_type]
-                        del self.retrievers[corpus_id][idx_type]
-                        logger.info(f"Deleted entire {idx_type} index for corpus {corpus_id}")
-
-                # Clean up corpus if no indices remain
-                if not self.indices[corpus_id]:
-                    del self.indices[corpus_id]
-                    del self.retrievers[corpus_id]
-                    logger.info(f"Removed empty corpus {corpus_id}")
-
-        except Exception as e:
-            logger.error(f"Failed to delete from corpus {corpus_id}, index {index_type}: {str(e)}")
+                        with self._registry_lock:
+                            del self.indices[corpus_id][kind]
+                            del self.retrievers[corpus_id][kind]
+                with self._registry_lock:
+                    if not self.indices[corpus_id]:
+                        del self.indices[corpus_id]
+                        del self.retrievers[corpus_id]
+        except Exception as error:
+            logger.error(f"Failed to delete from corpus {corpus_id}, index {index_type}: {error}")
             raise
 
     def clear(self, corpus_id: Optional[str] = None) -> None:
-        """Clear all indices for a specific corpus or all corpora.
+        """Clear selected corpora in lifecycle order without blocking readers.
 
-        Args:
-            corpus_id (Optional[str]): Specific corpus to clear. If None, clears all corpora.
-
-        Raises:
-            Exception: If clearing fails.
+        The writer gate also orders this operation after an in-flight add/load,
+        so a pending new index cannot be published after the clear completes.
         """
-        try:
+        with self._lifecycle_lock:
             with self._registry_lock:
-                target_corpora = [corpus_id] if corpus_id is not None else list(self.indices.keys())
-                for cid in target_corpora:
-                    if cid not in self.indices:
-                        logger.warning(f"No indices found for corpus {cid}")
-                        continue
-
-                    for idx_type in list(self.indices[cid].keys()):
-                        index = self.indices[cid][idx_type]
-                        index.clear()
-                        del self.indices[cid][idx_type]
-                        del self.retrievers[cid][idx_type]
-                        logger.info(f"Cleared {idx_type} index for corpus {cid}")
-
-                    # Clean up corpus if no indices remain
-                    del self.indices[cid]
-                    del self.retrievers[cid]
-                    logger.info(f"Cleared corpus {cid}")
-
-        except Exception as e:
-            logger.error(f"Failed to clear indices for corpus {corpus_id or 'all'}: {str(e)}")
-            raise
+                corpora = [corpus_id] if corpus_id is not None else list(self.indices)
+            for cid in corpora:
+                self.delete(cid)
 
     def _index_snapshots(self, corpus_id, index_type, graph_exported):
         """Capture detached committed data for exactly the selected indices."""
@@ -417,41 +396,43 @@ class RAGEngine:
             if identity in seen:
                 raise ValueError(f"Multiple snapshots found for {identity}")
             seen.add(identity)
-        prepared = []
-        identifiers = []
-        for snapshot in snapshots:
-            cid, kind = snapshot.metadata.corpus_id, snapshot.metadata.index_type
-            if kind == IndexType.VECTOR:
-                index = self._new_index(kind)
-                retriever = self._new_retriever(kind, index)
-                owned = self._owned_nodes(snapshot.corpus, cid, kind)
-                loaded = index.load(owned)
-                if len(loaded) != len(owned):
-                    raise RuntimeError(f"Incomplete snapshot ingestion for corpus {cid}")
-                prepared.append((cid, kind, index, retriever))
-                identifiers.extend(loaded)
-            else:
-                # Graph persistence has its own external backend lifecycle.
-                # Retain that path without promising vector-style rollback.
-                identifiers.extend(self._load_index(snapshot.corpus, cid, kind))
-        with self._registry_lock:
-            for cid, kind, index, retriever in prepared:
-                self.indices.setdefault(cid, {})[kind] = index
-                self.retrievers.setdefault(cid, {})[kind] = retriever
+        with self._lifecycle_lock:
+            prepared = []
+            identifiers = []
+            for snapshot in snapshots:
+                cid, kind = snapshot.metadata.corpus_id, snapshot.metadata.index_type
+                if kind == IndexType.VECTOR:
+                    index = self._new_index(kind)
+                    retriever = self._new_retriever(kind, index)
+                    owned = self._owned_nodes(snapshot.corpus, cid, kind)
+                    loaded = index.load(owned)
+                    if len(loaded) != len(owned):
+                        raise RuntimeError(f"Incomplete snapshot ingestion for corpus {cid}")
+                    prepared.append((cid, kind, index, retriever))
+                    identifiers.extend(loaded)
+                else:
+                    # Graph persistence has its own external backend lifecycle.
+                    # Retain that path without promising vector-style rollback.
+                    identifiers.extend(self._load_index(snapshot.corpus, cid, kind))
+            with self._registry_lock:
+                for cid, kind, index, retriever in prepared:
+                    self.indices.setdefault(cid, {})[kind] = index
+                    self.retrievers.setdefault(cid, {})[kind] = retriever
         return identifiers
 
     def _load_index(self, corpus: Corpus, corpus_id: str, index_type: str) -> Sequence[str]:
         """Load one index; vector snapshots replace rather than append data."""
-        with self._registry_lock:
-            index = self.indices.get(corpus_id, {}).get(index_type)
+        with self._lifecycle_lock:
+            with self._registry_lock:
+                index = self.indices.get(corpus_id, {}).get(index_type)
+                retriever = self.retrievers.get(corpus_id, {}).get(index_type)
             if index_type == IndexType.VECTOR or index is None:
                 index = self._new_index(index_type)
                 retriever = self._new_retriever(index_type, index)
-            else:
-                retriever = self.retrievers[corpus_id][index_type]
             loaded = index.load(self._owned_nodes(corpus, corpus_id, index_type))
-            self.indices.setdefault(corpus_id, {})[index_type] = index
-            self.retrievers.setdefault(corpus_id, {})[index_type] = retriever
+            with self._registry_lock:
+                self.indices.setdefault(corpus_id, {})[index_type] = index
+                self.retrievers.setdefault(corpus_id, {})[index_type] = retriever
             return loaded
 
     async def aget(self, corpus_id: str, index_type: str, node_ids: List[str]) -> List[Union[TextChunk, ImageChunk]]:
