@@ -611,6 +611,9 @@ class WorkFlowGraph(BaseModule):
 
     def init_module(self):
         self._lock = threading.Lock()
+        self._display_fig = None
+        self._display_live = False
+        self._display_refreshing = False
         if not self.graph:
             self._init_from_nodes(self.nodes, explicit_edges=self.edges)
         elif isinstance(self.graph, MultiDiGraph):
@@ -1156,6 +1159,7 @@ class WorkFlowGraph(BaseModule):
         """
         for node in self.nodes:
             node.set_status(WorkFlowNodeState.PENDING)
+        self._refresh_display()
 
     def set_node_status(self, node: Union[str, WorkFlowNode], new_state: WorkFlowNodeState) -> bool:
         """
@@ -1176,6 +1180,8 @@ class WorkFlowGraph(BaseModule):
             flag = True
         except Exception as e:
             raise ValueError(f"An error occurs when setting node status: {e}")
+        if flag:
+            self._refresh_display()
         return flag
     
     def pending(self, node: Union[str, WorkFlowNode]) -> bool:
@@ -1460,14 +1466,38 @@ class WorkFlowGraph(BaseModule):
         )
         return desc
 
-    def display(self):
-        """
-        Display the workflow graph with node and edge attributes.
-        Nodes are colored based on their status.
-        """
+    @staticmethod
+    def _matplotlib_gui_available() -> bool:
+        """Return whether the current Matplotlib backend can open a GUI window."""
+        import matplotlib
+        from matplotlib.backends.registry import backend_registry
+
+        try:
+            _backend, framework = backend_registry.resolve_backend(matplotlib.get_backend())
+        except Exception:
+            return False
+        return framework is not None
+
+    def _get_open_display_figure(self):
+        """Return the live display figure, or None if it was closed."""
+        fig = getattr(self, "_display_fig", None)
+        if fig is None:
+            return None
+        import matplotlib.pyplot as plt
+        try:
+            still_open = plt.fignum_exists(fig.number)
+        except Exception:
+            still_open = False
+        if still_open:
+            return fig
+        self._display_fig = None
+        self._display_live = False
+        return None
+
+    def _redraw_display(self, fig) -> None:
+        """Draw the current graph and node statuses onto ``fig``."""
         import matplotlib.pyplot as plt
 
-        # Define colors for node statuses
         status_colors = {
             WorkFlowNodeState.PENDING: 'lightgray',
             WorkFlowNodeState.RUNNING: 'orange',
@@ -1475,64 +1505,139 @@ class WorkFlowGraph(BaseModule):
             WorkFlowNodeState.FAILED: 'red'
         }
 
-        if not self.graph.nodes:
-            print("Graph is empty. No nodes to display.")
-            return
+        fig.clf()
+        ax = fig.add_subplot(111)
 
-        # Get node colors based on their statuses
         node_colors = [status_colors.get(self.get_node_status(node), 'lightgray') for node in self.graph.nodes]
-
-        # Prepare node labels with additional information
         node_labels = {node: self.get_node_description(data["ref"]) for node, data in self.graph.nodes(data=True)}
-        
-        # Draw the graph
-        # pos = nx.shell_layout(self.graph)
+
         if len(self.graph.nodes) == 1:
             single_node = list(self.graph.nodes)[0]
-            pos = {single_node: (0, 0)}  # Place the single node at the center
+            pos = {single_node: (0, 0)}
         else:
             pos = nx.shell_layout(self.graph)
-        
-        plt.figure(figsize=(12, 8))
+
         nx.draw(
-            self.graph, pos, with_labels=False, node_color=node_colors, edge_color='black',
+            self.graph, pos, ax=ax, with_labels=False, node_color=node_colors, edge_color='black',
             node_size=1500, font_size=8, font_color='black', font_weight='bold'
         )
 
         if len(self.graph.nodes) == 1:
             for node, (x, y) in pos.items():
-                plt.text(x+0.005, y, node_labels[node], ha='left', va='center', fontsize=9, bbox=dict(facecolor='white', alpha=0.7))
+                ax.text(x+0.005, y, node_labels[node], ha='left', va='center', fontsize=9, bbox=dict(facecolor='white', alpha=0.7))
         else:
-            # Draw node labels next to the nodes (left-aligned)
-            # text_offsets = {node: (pos[node][0]-0.2, pos[node][1]-0.22) for node in self.graph.nodes}
             y_positions = [y for _, y in pos.values()]
             y_min, y_max = min(y_positions), max(y_positions)
             lower_third_boundary = y_min + (y_max - y_min) / 3
 
-            # Adjust text offsets based on node position in the graph
             text_offsets = {}
             for node, (x, y) in pos.items():
-                if y < lower_third_boundary:  # If in the lower third, display label above the node
+                if y < lower_third_boundary:
                     text_offsets[node] = (x-0.2, y + 0.23)
-                else:  # Otherwise, display label below the node
+                else:
                     text_offsets[node] = (x-0.2, y - 0.23)
-            
+
             for node, (x, y) in text_offsets.items():
-                plt.text(x, y, node_labels[node], ha='left', va='center', fontsize=9, bbox=dict(facecolor='white', alpha=0.7))
+                ax.text(x, y, node_labels[node], ha='left', va='center', fontsize=9, bbox=dict(facecolor='white', alpha=0.7))
 
-        # Draw edge labels for priorities
         edge_labels = nx.get_edge_attributes(self.graph, 'priority')
-        nx.draw_networkx_edge_labels(self.graph, pos, edge_labels=edge_labels)
+        nx.draw_networkx_edge_labels(self.graph, pos, edge_labels=edge_labels, ax=ax)
 
-        # Add a legend to show node status colors
         legend_elements = [
             plt.Line2D([0], [0], marker='o', color='w', label=status.name, markersize=10, markerfacecolor=color)
             for status, color in status_colors.items()
         ]
-        plt.legend(handles=legend_elements, title="Workflow Node Status", loc='upper left', fontsize='medium')
+        ax.legend(handles=legend_elements, title="Workflow Node Status", loc='upper left', fontsize='medium')
+        ax.set_title("Workflow Graph")
 
-        plt.title("Workflow Graph")
-        plt.show()
+    def _refresh_display(self) -> None:
+        """Redraw an open non-blocking display. Never raises into workflow execution."""
+        if not getattr(self, "_display_live", False):
+            return
+        if getattr(self, "_display_refreshing", False):
+            return
+        fig = self._get_open_display_figure()
+        if fig is None:
+            return
+
+        self._display_refreshing = True
+        try:
+            self._redraw_display(fig)
+            fig.canvas.draw()
+            if self._matplotlib_gui_available():
+                fig.canvas.flush_events()
+        except Exception as exc:
+            logger.warning("Failed to refresh workflow graph display: {}", exc)
+            self._display_live = False
+        finally:
+            self._display_refreshing = False
+
+    def close_display(self) -> None:
+        """Close the window opened by ``display()``."""
+        import matplotlib.pyplot as plt
+
+        self._display_live = False
+        fig = getattr(self, "_display_fig", None)
+        self._display_fig = None
+        if fig is None:
+            return
+        try:
+            plt.close(fig)
+        except Exception as exc:
+            logger.debug("Failed to close workflow graph display: {}", exc)
+
+    def display(self, block: bool = False):
+        """
+        Display the workflow graph with node and edge attributes.
+        Nodes are colored based on their status.
+
+        The window is non-blocking by default, so later steps keep running and
+        the figure refreshes when a node status changes. Pass ``block=True`` to
+        wait until the window is closed. Call ``close_display()`` to close a
+        non-blocking window.
+
+        Args:
+            block: When True, block until the window is closed. Defaults to False.
+
+        Returns:
+            The Matplotlib figure, or None when the graph has no nodes.
+        """
+        import matplotlib.pyplot as plt
+
+        if not self.graph.nodes:
+            print("Graph is empty. No nodes to display.")
+            return None
+
+        fig = self._get_open_display_figure()
+        if fig is None:
+            fig = plt.figure(figsize=(12, 8))
+            self._display_fig = fig
+
+        self._display_live = not block
+        self._display_refreshing = True
+        try:
+            self._redraw_display(fig)
+        finally:
+            self._display_refreshing = False
+
+        if not self._matplotlib_gui_available():
+            fig.canvas.draw()
+            if block:
+                self._display_live = False
+            return fig
+
+        if block:
+            plt.show(block=True)
+            self._display_fig = None
+            self._display_live = False
+            return fig
+
+        plt.show(block=False)
+        try:
+            fig.canvas.flush_events()
+        except Exception as exc:
+            logger.debug("Failed to flush workflow graph display events: {}", exc)
+        return fig
 
     def get_workflow_description(self) -> str:
 

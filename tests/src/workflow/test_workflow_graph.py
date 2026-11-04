@@ -1,4 +1,7 @@
+import inspect
 import unittest
+from unittest.mock import patch
+
 import pytest
 
 from evoagentx.core.base_config import Parameter
@@ -753,6 +756,94 @@ class TestWorkFlowGraph(unittest.TestCase):
                 workflow_inputs=[workflow_input],
                 workflow_outputs=[workflow_output],
             )
+
+    def _node_facecolors(self, fig):
+        from matplotlib.collections import PathCollection
+
+        ax = fig.axes[0]
+        collection = next(coll for coll in ax.collections if isinstance(coll, PathCollection))
+        return [tuple(round(float(channel), 5) for channel in row) for row in collection.get_facecolor()]
+
+    def test_display_default_is_nonblocking(self):
+        signature = inspect.signature(WorkFlowGraph.display)
+        self.assertIs(signature.parameters["block"].default, False)
+
+    def test_display_updates_colors_without_blocking(self):
+        import matplotlib
+        matplotlib.use("Agg", force=True)
+        import matplotlib.pyplot as plt
+
+        graph = self.linear_graph
+        fig = graph.display()
+        try:
+            self.assertIsNotNone(fig)
+            self.assertTrue(graph._display_live)
+            self.assertIs(graph._display_fig, fig)
+
+            before = self._node_facecolors(fig)
+            graph.running("Task1")
+            after = self._node_facecolors(fig)
+            task_index = list(graph.graph.nodes).index("Task1")
+            self.assertNotEqual(before[task_index], after[task_index])
+            self.assertGreater(after[task_index][0], after[task_index][2])
+
+            graph.close_display()
+            self.assertFalse(graph._display_live)
+            self.assertIsNone(graph._display_fig)
+            self.assertFalse(plt.fignum_exists(fig.number))
+
+            graph.completed("Task1")
+            self.assertIsNone(graph._display_fig)
+        finally:
+            plt.close("all")
+
+    def test_display_block_waits_until_window_closes(self):
+        import matplotlib
+        matplotlib.use("Agg", force=True)
+        import matplotlib.pyplot as plt
+
+        graph = self.linear_graph
+        with patch.object(WorkFlowGraph, "_matplotlib_gui_available", return_value=True), \
+             patch("matplotlib.pyplot.show") as show:
+            fig = graph.display(block=True)
+        try:
+            show.assert_called_once_with(block=True)
+            self.assertFalse(graph._display_live)
+            self.assertIsNone(graph._display_fig)
+        finally:
+            plt.close(fig)
+            plt.close("all")
+
+    def test_display_show_uses_nonblocking_flag(self):
+        import matplotlib
+        matplotlib.use("Agg", force=True)
+        import matplotlib.pyplot as plt
+
+        graph = self.linear_graph
+        with patch.object(WorkFlowGraph, "_matplotlib_gui_available", return_value=True), \
+             patch("matplotlib.pyplot.show") as show:
+            fig = graph.display()
+        try:
+            show.assert_called_once_with(block=False)
+            self.assertTrue(graph._display_live)
+        finally:
+            graph.close_display()
+            plt.close(fig)
+            plt.close("all")
+
+    def test_display_empty_graph_does_not_open_window(self):
+        import matplotlib
+        matplotlib.use("Agg", force=True)
+        import matplotlib.pyplot as plt
+
+        graph = self.linear_graph
+        graph.graph.clear()
+        open_figures = set(plt.get_fignums())
+        try:
+            self.assertIsNone(graph.display())
+            self.assertEqual(open_figures, set(plt.get_fignums()))
+        finally:
+            plt.close("all")
 
 
 if __name__ == "__main__":

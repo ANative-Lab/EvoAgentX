@@ -255,8 +255,10 @@ sequential_workflow_graph.save_module("examples/output/my_sequential_workflow.js
 ### Visualizing the Workflow
 
 ```python
-# Display the workflow graph with node statuses visually
+# Open a non-blocking window. Node colors update while the workflow runs.
+# Pass block=True to wait until the window is closed.
 workflow_graph.display()
+workflow_graph.close_display()
 ```
 
 The `WorkFlowGraph` and `SequentialWorkFlowGraph` classes provide a flexible and powerful way to design complex agent workflows, track their execution, and manage the flow of data between tasks. 

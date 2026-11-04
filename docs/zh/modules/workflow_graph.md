@@ -254,8 +254,10 @@ sequential_workflow_graph.save_module("examples/output/my_sequential_workflow.js
 ### 可视化工作流
 
 ```python
-# 以可视方式显示工作流图
+# 打开非阻塞窗口。工作流运行时节点颜色会随之更新。
+# 传入 block=True 会等待窗口关闭。
 workflow_graph.display()
+workflow_graph.close_display()
 ```
 
 `WorkFlowGraph` 和 `SequentialWorkFlowGraph` 类提供了一种灵活而强大的方式来设计复杂的代理工作流、跟踪其执行并管理任务之间的数据流。 
