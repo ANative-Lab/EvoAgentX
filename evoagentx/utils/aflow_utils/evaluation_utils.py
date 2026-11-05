@@ -13,6 +13,9 @@ class EvaluationUtils:
 
         evaluator = AFlowEvaluator(llm=optimizer.executor_llm)
         sum_score = 0
+        completed = 0
+        if validation_n < 1:
+            raise ValueError("validation_n must be positive")
         
         for _ in range(validation_n):
 
@@ -26,12 +29,15 @@ class EvaluationUtils:
             optimizer.data_utils.save_results(result_path, data)
             
             sum_score += score
+            completed += 1
 
             if all_failed:
                 logger.warning(f"All test cases failed in round {cur_round}. Stopping evaluation for this round.")
                 break 
             
-        return sum_score / validation_n
+        # Legacy selection averages persisted replicates; feedback must use the
+        # same denominator. Reliable mode separately requires complete coverage.
+        return sum_score / completed
 
     async def evaluate_graph_test_async(self, optimizer):
 

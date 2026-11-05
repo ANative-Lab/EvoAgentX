@@ -192,6 +192,9 @@ class DataUtils:
         self.top_scores = []
 
         data = load_json(result_file, type="json")
+        data = [row for row in data if row.get("split", "validation") == "validation"]
+        if not data:
+            return self.top_scores
         df = pd.DataFrame(data)
 
         scores_per_round = df.groupby("round")["score"].mean().to_dict()
@@ -218,4 +221,3 @@ def test_check():
 test_check()
 """
     return tester_function
-    

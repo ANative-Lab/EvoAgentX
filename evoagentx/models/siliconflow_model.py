@@ -59,5 +59,6 @@ class SiliconFlowLLM(OpenAILLM):
             input_tokens=usage.prompt_tokens,
             output_tokens=usage.completion_tokens,
             cost=0.0,
+            pricing_known=False,
         )
         cost_manager.update_cost(cost=cost, model=self.config.model)

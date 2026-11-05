@@ -1,8 +1,9 @@
 """Persistent admission counters and conservative whole-operation reservations."""
 
 import time
+
+from .store import atomic_json
 from .types import SCHEMA_VERSION, finite_score
-from .store import atomic_json, read_json
 
 
 class AdmissionBudget:
@@ -97,6 +98,7 @@ class AdmissionBudget:
         # execution terminated; absent observer events never prove zero dollars.
         reservation['reserved'] = 0.0 if terminated and pricing_known else max(0, bound - known_cost)
         reservation['status'] = 'finished' if terminated else 'unknown'
+        reservation.update(known_cost=known_cost, pricing_known=pricing_known, terminated=terminated)
         atomic_json(self.store.path / 'admissions' / f'{operation_id}.json', reservation)
         if reservation['reserved'] == 0 and terminated:
             self.state['reservations'].pop(operation_id)

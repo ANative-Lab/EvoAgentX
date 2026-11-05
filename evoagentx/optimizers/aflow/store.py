@@ -13,9 +13,17 @@ import socket
 import tempfile
 import time
 import uuid
+from dataclasses import replace
 from pathlib import Path
 
-from .types import SCHEMA_VERSION, Observation, TrialSummary, canonical, digest
+from .types import (
+    SCHEMA_VERSION,
+    EvaluationPlan,
+    Observation,
+    TrialSummary,
+    canonical,
+    digest,
+)
 
 
 def atomic_json(path, value):
@@ -69,6 +77,23 @@ class TrialStore:
         self._unclean = False
         self._active_operations = set()
         self._pending_operations = {}
+        self._examples = {example.key: example for example in plan.examples}
+
+    @classmethod
+    def open_existing(cls, path, recover_owner=False):
+        """Open an existing saved plan for explicit offline recovery/inspection.
+
+        Args:
+            path: Reliable experiment directory containing plan.json.
+            recover_owner: Explicit acknowledgement of an unclean dead owner.
+
+        This never automatically resolves unknown calls or admits paid work.
+        A previous running/stopping process must have terminated before recovery.
+        """
+        plan = EvaluationPlan.from_dict(read_json(Path(path) / 'plan.json'))
+        if recover_owner:
+            plan = replace(plan, config=replace(plan.config, recover_owner=True))
+        return cls(path, plan)
 
     def __enter__(self):
         """Acquire an OS-held writer lock before reading or mutating checkpoints."""
@@ -276,8 +301,7 @@ class TrialStore:
         """Commit an immutable result before it can be consumed by selection."""
         self._require_owner()
         self.trial(observation.trial_id)
-        allowed = {e.key: e for e in self.plan.examples}
-        example = allowed.get(observation.example_key)
+        example = self._examples.get(observation.example_key)
         if example is None or observation.replicate >= self.plan.config.replicates:
             raise ValueError('observation outside fixed plan')
         expected = digest([observation.trial_id, example.key, observation.replicate, observation.attempt])

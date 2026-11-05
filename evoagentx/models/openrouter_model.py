@@ -296,6 +296,7 @@ class OpenRouterLLM(BaseLLM):
             logger.warning(f"[OpenRouterLLM] usage is None in response (id={response.id}); cost will not be recorded.")
             return
         cost_value = getattr(usage, "cost", None)
+        pricing_known = cost_value is not None
         if cost_value is None:
             logger.warning(
                 f"[OpenRouterLLM] usage.cost not present in response (id={response.id}); "
@@ -306,6 +307,7 @@ class OpenRouterLLM(BaseLLM):
             input_tokens=usage.prompt_tokens,
             output_tokens=usage.completion_tokens,
             cost=cost_value,
+            pricing_known=pricing_known,
         )
         cost_manager.update_cost(cost, model=self.config.model)
 

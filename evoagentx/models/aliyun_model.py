@@ -79,6 +79,7 @@ class AliyunLLM(OpenAILLM):
                 input_tokens=usage.prompt_tokens,
                 output_tokens=usage.completion_tokens,
                 cost=0.0,
+                pricing_known=False,
             )
         usage_object = usage if isinstance(usage, Usage) else Usage(**usage.model_dump())
         input_cost, output_cost = cost_per_token(model=self._litellm_model, usage_object=usage_object)

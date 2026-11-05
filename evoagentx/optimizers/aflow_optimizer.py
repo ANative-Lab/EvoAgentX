@@ -6,7 +6,7 @@ import shutil
 import asyncio
 import numpy as np
 from tqdm import tqdm
-from typing import List, Any
+from typing import List, Any, Optional
 from pydantic import Field
 
 from ..core.logging import logger
@@ -18,6 +18,7 @@ from ..utils.aflow_utils.experience_utils import ExperienceUtils
 from ..utils.aflow_utils.evaluation_utils import EvaluationUtils
 from ..utils.aflow_utils.graph_utils import GraphUtils, OPERATOR_MAP
 from ..utils.aflow_utils.convergence_utils import ConvergenceUtils
+from .aflow import ReliableTrialConfig
 
 
 class GraphOptimizeOutput(LLMOutputParser):
@@ -63,6 +64,8 @@ class AFlowOptimizer(BaseModule):
     validation_rounds: int = Field(default=5, description="Run the workflow for `validation_rounds` times to evaluate the performance on the validation set.")
     eval_rounds: int = Field(default=3, description="Run the workflow for `eval_rounds` times to evaluate the performance on the test set.")
     check_convergence: bool = Field(default=True, description="Whether to check for convergence.")
+    reliable_trials: Optional[ReliableTrialConfig] = Field(default=None, description="Opt-in durable AFlow trial policy.")
+    max_proposal_attempts: int = Field(default=20, ge=1, description="Bound duplicate proposals in legacy mode.")
 
     def init_module(self, **kwargs):
 
@@ -78,14 +81,17 @@ class AFlowOptimizer(BaseModule):
 
         self.graph = None
         self.round = self.initial_round
-        if self.round == 0:
+        self._baseline_complete = False
+        if self.reliable_trials is not None and self.initial_round != 0:
+            raise ValueError("Reliable trials resume by experiment identity, not initial_round")
+        if self.round == 0 and self.reliable_trials is None:
             round_zero_path = os.path.join(self.root_path, f"round_{self.round}")
             os.makedirs(round_zero_path, exist_ok=True)
             shutil.copy2(os.path.join(self.graph_path, "graph.py"), os.path.join(round_zero_path, "graph.py"))
             shutil.copy2(os.path.join(self.graph_path, "prompt.py"), os.path.join(round_zero_path, "prompt.py"))
             self.graph_utils.update_prompt_import(os.path.join(round_zero_path, "graph.py"), round_zero_path)
         
-        if not os.path.exists(os.path.join(self.root_path, f"round_{self.round}")):
+        if self.reliable_trials is None and not os.path.exists(os.path.join(self.root_path, f"round_{self.round}")):
             raise ValueError(f"Round {self.round} does not exist in {self.root_path}")
         
         if self.optimizer_llm is None:
@@ -104,10 +110,18 @@ class AFlowOptimizer(BaseModule):
             benchmark: The benchmark to evaluate the workflow against
         """
         self.benchmark = benchmark
+        if self.reliable_trials is not None:
+            return asyncio.run(self.optimize_async(benchmark))
         for _ in range(self.max_rounds):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            score = loop.run_until_complete(self._execute_with_retry(self._optimize_graph))
+            try:
+                score = loop.run_until_complete(self._execute_with_retry(self._optimize_graph))
+            finally:
+                loop.close()
+            if score is None:
+                logger.warning("Optimization round exhausted without completed evidence")
+                break
             self.round += 1
             logger.info(f"Score for round {self.round}: {score}")
             if self._check_convergence():
@@ -116,6 +130,17 @@ class AFlowOptimizer(BaseModule):
                 logger.info(f"Max rounds reached: {self.max_rounds}, stopping optimization.")
                 break
     
+    async def optimize_async(self, benchmark: Benchmark):
+        """Run or resume opt-in reliable evolution in the caller's event loop."""
+        if self.reliable_trials is None:
+            raise ValueError("optimize_async requires reliable_trials configuration")
+        from .aflow.runner import ReliableAFlowRunner
+        self.benchmark = benchmark
+        self.trial_result = await ReliableAFlowRunner(self, benchmark).run()
+        if self.trial_result.best_round is not None:
+            self.round = self.trial_result.best_round
+        return self.trial_result
+
     def test(self, benchmark: Benchmark, test_rounds: List[int] = None):
         """Run the test evaluation on optimized workflows.
         
@@ -127,6 +152,8 @@ class AFlowOptimizer(BaseModule):
             test_rounds: Specific round numbers to test, or None to use the best round
         """
         self.benchmark = benchmark
+        if self.reliable_trials is not None:
+            return asyncio.run(self.test_async(benchmark, test_rounds))
         if test_rounds is None:
             best_round = self._load_best_round()
             logger.info(f"No test rounds provided, using best round: {best_round}")
@@ -134,7 +161,18 @@ class AFlowOptimizer(BaseModule):
         for _ in tqdm(range(self.eval_rounds)):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            loop.run_until_complete(self._run_test(test_rounds))
+            try:
+                loop.run_until_complete(self._run_test(test_rounds))
+            finally:
+                loop.close()
+
+    async def test_async(self, benchmark: Benchmark, test_rounds: List[int] = None):
+        """Evaluate a separate reliable test plan without changing parent evidence."""
+        if self.reliable_trials is None:
+            raise ValueError("test_async requires reliable_trials configuration")
+        from .aflow.runner import ReliableAFlowRunner
+        self.benchmark = benchmark
+        return await ReliableAFlowRunner(self, benchmark).test(test_rounds)
     
     async def _execute_with_retry(self, func: callable, max_retries: int = 3) -> Any:
 
@@ -171,8 +209,9 @@ class AFlowOptimizer(BaseModule):
         graph_path = self.root_path
         data = self.data_utils.load_results(graph_path)
 
-        if self.round == 0:
+        if self.round == 0 and not self._baseline_complete:
             self.avg_score = await self._handle_initial_round(graph_path, validation_n, data)
+            self._baseline_complete = True
         
         return await self._handle_optimization_round(graph_path, validation_n, data)
 
@@ -186,7 +225,7 @@ class AFlowOptimizer(BaseModule):
 
         directory = self.graph_utils.create_round_directory(graph_path, self.round + 1)
 
-        while True:
+        for _ in range(self.max_proposal_attempts):
             sample = self._get_optimization_sample()
             prompt, graph_load = self.graph_utils.read_graph_files(sample["round"], graph_path)
             graph = self.graph_utils.extract_solve_graph(graph_load)
@@ -209,6 +248,8 @@ class AFlowOptimizer(BaseModule):
 
             if self.experience_utils.check_modification(processed_experience, response['modification'], sample["round"]):
                 break
+        else:
+            raise RuntimeError("Duplicate proposal attempt budget exhausted")
         
         # Save and evaluate results
         avg_score = await self._evaluate_and_save_optimization_results(directory, response, sample, data, validation_n)
@@ -269,6 +310,16 @@ class AFlowOptimizer(BaseModule):
 
     def _load_best_round(self) -> int:
         """Load the best round"""
+        if self.reliable_trials is not None:
+            from .aflow.runner import ReliableAFlowRunner
+            from .aflow.store import TrialStore
+            from .aflow.evidence import EvidenceView
+            runner = ReliableAFlowRunner(self, self.benchmark)
+            with TrialStore(runner.path, runner.plan) as store:
+                best = EvidenceView(store).best()
+                if best is None:
+                    raise ValueError("No eligible reliable validation trial")
+                return best.round
         ranked_scores = self.data_utils._load_scores()
         return ranked_scores[0]["round"]
 
@@ -278,8 +329,14 @@ class AFlowOptimizer(BaseModule):
         logger.info("Running test evaluation...")
 
         graph_path = self.root_path
-        data = self.data_utils.load_results(graph_path)
-        json_file_path = self.data_utils.get_results_file_path(graph_path)
+        json_file_path = os.path.join(graph_path, "test_results.json")
+        import json
+        data = []
+        if os.path.exists(json_file_path):
+            with open(json_file_path, encoding="utf-8") as stream:
+                data = json.load(stream)
+        if not isinstance(data, list):
+            raise ValueError("Invalid test results")
         scores = [] 
 
         # for round in tqdm(test_rounds, desc="Testing"):
@@ -293,6 +350,7 @@ class AFlowOptimizer(BaseModule):
             scores.append(score)
 
             new_data = self.data_utils.create_result_data(round, score, avg_cost, total_cost)
+            new_data['split'] = 'test'
             data.append(new_data)
 
             logger.info(f"Test round {round} score: {score}, avg_cost: {avg_cost}, total_cost: {total_cost}")

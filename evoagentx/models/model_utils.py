@@ -1,5 +1,5 @@
-import threading
 import math
+import threading
 from collections import defaultdict
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -8,12 +8,12 @@ from typing import Optional
 
 import pandas as pd
 
-from ..core.logging import logger
-from ..core.decorators import atomic_method
 from ..core.callbacks import suppress_cost_logs
+from ..core.decorators import atomic_method
+from ..core.logging import logger
 from ..core.registry import MODEL_REGISTRY
-from .model_configs import LLMConfig
 from ..models.base_model import BaseLLM
+from .model_configs import LLMConfig
 
 _cost_observers = ContextVar('aflow_cost_observers', default=())
 
@@ -29,7 +29,7 @@ class CostEvent:
     output_tokens: int
 
 def get_openai_model_cost() -> dict:
-    import json 
+    import json
     from importlib.resources import files
     # import importlib.resources
     # with importlib.resources.open_text('litellm', 'model_prices_and_context_window_backup.json') as f:
@@ -66,13 +66,19 @@ class Cost:
         output_tokens: Optional[int] = None,
         input_cost: Optional[float] = None,
         output_cost: Optional[float] = None,
-        cost: Optional[float] = None
+        cost: Optional[float] = None,
+        pricing_known: Optional[bool] = None,
     ):
-        self.pricing_known = cost is not None or input_cost is not None or output_cost is not None
+        self._pricing_known = (cost is not None or input_cost is not None or output_cost is not None) if pricing_known is None else pricing_known
         self.input_tokens = input_tokens
         self.output_tokens = output_tokens
         # Keep input_cost/output_cost only as temporary constructor compatibility.
         self.cost = cost if cost is not None else (input_cost or 0.0) + (output_cost or 0.0)
+
+    @property
+    def pricing_known(self) -> bool:
+        """Return whether numeric cost has supported pricing rather than a fallback."""
+        return self._pricing_known
 
     @property
     def cost(self) -> float:

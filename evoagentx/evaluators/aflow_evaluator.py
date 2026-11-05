@@ -1,13 +1,15 @@
 # Acknowledgement: Modified from AFlow (https://github.com/geekan/MetaGPT/blob/main/metagpt/ext/aflow/scripts/evaluator.py) under MIT License
 
 import asyncio
-from tqdm.asyncio import tqdm_asyncio
-from typing import Tuple, Optional, Callable
-from ..benchmark.benchmark import Benchmark
-from ..models.base_model import BaseLLM
-from ..core.logging import logger
-from ..models.model_utils import cost_manager
+from typing import Callable, Optional, Tuple
 
+from tqdm.asyncio import tqdm_asyncio
+
+from ..benchmark.benchmark import Benchmark
+from ..core.logging import logger
+from ..models.base_model import BaseLLM
+from ..models.model_utils import cost_manager
+from ..optimizers.aflow.evidence import CostLedger
 
 # If you want to customize tasks, add task types here and provide evaluation functions, just like the ones given above
 
@@ -57,7 +59,7 @@ class AFlowEvaluator:
             return (0.0, 0.0, 0.0, True)
         
         # get total cost before evaluation
-        cost_before = cost_manager.get_total_cost()
+        ledger = CostLedger()
         
         # Create a shared semaphore
         semaphore = asyncio.Semaphore(max_concurrent_tasks)
@@ -74,18 +76,19 @@ class AFlowEvaluator:
         tasks = [evaluate_with_semaphore(example) for example in data]
 
         # Wait for all tasks to complete
-        results = await tqdm_asyncio.gather(
-            *tasks,
-            desc=f"Evaluating {benchmark.name} problems",
-            total=len(data)
-        )
+        with cost_manager.observe(ledger.observe):
+            results = await tqdm_asyncio.gather(
+                *tasks,
+                desc=f"Evaluating {benchmark.name} problems",
+                total=len(data)
+            )
 
         # Replace failed evaluations (None results) with 0
         valid_results = [0.0 if r is None else r for r in results]
         all_failed = all(r is None for r in results)
 
         # get total cost after evaluation
-        total_cost = cost_manager.get_total_cost() - cost_before
+        total_cost = ledger.close()['known_cost']
         avg_cost = total_cost / len(data)
 
         if not valid_results:
@@ -94,8 +97,4 @@ class AFlowEvaluator:
         else:
             avg_metrics = sum(valid_results) / len(valid_results)
         
-        return avg_metrics, avg_cost, total_cost, all_failed 
-        
-        
-
-    
+        return avg_metrics, avg_cost, total_cost, all_failed

@@ -130,7 +130,7 @@ class LiteLLM(OpenAILLM):
                 f"[LiteLLM] Could not compute cost for model '{self.config.model}': {e}. "
                 "Recording tokens with zero cost."
             )
-            return Cost(input_tokens=input_tokens, output_tokens=output_tokens, input_cost=0.0, output_cost=0.0)
+            return Cost(input_tokens=input_tokens, output_tokens=output_tokens, input_cost=0.0, output_cost=0.0, pricing_known=False)
 
     @retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(5))
     def single_generate(self, messages: List[dict], **kwargs) -> str:

@@ -36,7 +36,7 @@ async def owned_call(operation, timeout):
             return 'completed', task.result()
         except asyncio.CancelledError:
             return 'unknown', None
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - user/provider/export boundary is typed as evidence
             return 'error', exc
     except asyncio.CancelledError:
         task.cancel()
@@ -111,6 +111,11 @@ class DetailedEvaluator:
     async def evaluate(self, benchmark, graph, data, plan, trial_id, store, budget):
         """Resume completed coordinates and commit one complete or incomplete summary."""
         plan.verify_data(data)
+        # A durable completed outcome establishes completion even if the process
+        # died before releasing its conservative cost reservation.
+        for observation in store.observations(trial_id):
+            if observation.status not in ('unknown', 'cancelled') and observation.observation_id in budget.state['reservations']:
+                budget.finish(observation.observation_id, observation.known_cost, observation.pricing == 'known')
         existing = store.summary(trial_id)
         if existing is not None:
             return existing
