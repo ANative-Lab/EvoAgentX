@@ -279,3 +279,86 @@ def test_native_next_proposal_reacts_to_equal_mean_validation_tradeoff(tmp_path,
     assert report['proposal_feedback']['proposal_3'] == payload
     assert payload['comparisons'][0]['counts']['regressed'] == 2
     assert payload['comparisons'][0]['counts']['improved'] == 2
+
+
+@pytest.mark.parametrize('resolution', ['rerun', 'abandon'])
+def test_native_resolved_intent_without_outcome_drives_next_attempt(tmp_path, monkeypatch, resolution):
+    from evoagentx.optimizers.aflow import TrialStore
+    from evoagentx.optimizers.aflow import store as storage
+    optimizer, benchmark, llm = setup(tmp_path, monkeypatch, concurrency=1,
+        max_known_cost=10, example_cost_bound=.1, proposal_cost_bound=.1)
+    original = storage.atomic_json
+    def fail_result(path, value):
+        if '/observations/' in str(path):
+            raise OSError('review regression: outcome publication interrupted')
+        return original(path, value)
+    monkeypatch.setattr(storage, 'atomic_json', fail_result)
+    with pytest.raises(OSError):
+        optimizer.optimize(benchmark)
+    monkeypatch.setattr(storage, 'atomic_json', original)
+    path = Path('results/reliable/aflow')
+    with TrialStore.open_existing(path) as store:
+        unknown = store.unknown_attempts()
+        assert len(unknown) == 1 and store.observations('baseline') == []
+        old = dict(unknown[0])
+        store.resolve_unknown(old['attempt_id'], resolution, 'scripted native provider returned; termination confirmed')
+    before = llm.state['execution']
+    result = optimizer.optimize(benchmark)
+    observations = [json.loads(p.read_text()) for p in (path / 'trials/baseline/observations').glob('*.json')]
+    matching = [o for o in observations if o['example_key'] == old['example_key'] and o['replicate'] == old['replicate']]
+    if resolution == 'rerun':
+        assert result.score == 1 and result.status == 'exhausted'
+        assert llm.state['execution'] - before == 8
+        assert len(matching) == 1 and matching[0]['attempt'] == 2
+        assert matching[0]['observation_id'] != old['attempt_id']
+    else:
+        assert result.status == 'incomplete' and result.score is None
+        assert llm.state['execution'] - before == 3 and matching == []
+    budget = json.loads((path / 'budget.json').read_text())
+    retained = budget['reservations'][old['attempt_id']]
+    assert retained['reserved'] == pytest.approx(.1)
+    assert retained['status'] == 'finished' and not retained['pricing_known']
+    assert budget['uncertain']
+
+
+def test_native_completed_test_replay_preserves_finalized_unknown_reservation(tmp_path, monkeypatch):
+    optimizer, benchmark, llm = setup(tmp_path, monkeypatch, concurrency=1,
+        max_known_cost=10, example_cost_bound=.1, proposal_cost_bound=.1)
+    original_cost = Cost
+    monkeypatch.setitem(globals(), 'Cost', lambda **kwargs: original_cost(**kwargs, pricing_known=False))
+    optimizer.optimize(benchmark)
+    first = optimizer.test(benchmark, [1])
+    path = Path('results/reliable/aflow_test/budget.json')
+    before = json.loads(path.read_text())
+    calls = llm.state['execution']
+    second = optimizer.test(benchmark, [1])
+    assert second == first and second[0].eligible
+    assert llm.state['execution'] == calls
+    assert json.loads(path.read_text()) == before
+    assert before['known_spent'] == 0
+    assert sum(r['reserved'] for r in before['reservations'].values()) == pytest.approx(.4)
+
+
+def test_native_pending_proposal_recovery_keeps_finalized_unknown_cost(tmp_path, monkeypatch):
+    from evoagentx.optimizers.aflow import store as storage
+    optimizer, benchmark, llm = setup(tmp_path, monkeypatch, concurrency=1,
+        max_known_cost=10, example_cost_bound=.1, proposal_cost_bound=.1)
+    original_cost = Cost
+    monkeypatch.setitem(globals(), 'Cost', lambda **kwargs: original_cost(**kwargs, pricing_known=False))
+    original_rename = storage.os.rename
+    def fail_candidate(source, destination):
+        if str(destination).endswith('/candidate_1/artifacts'):
+            raise OSError('review regression: candidate artifact publication interrupted')
+        return original_rename(source, destination)
+    monkeypatch.setattr(storage.os, 'rename', fail_candidate)
+    with pytest.raises(OSError):
+        optimizer.optimize(benchmark)
+    monkeypatch.setattr(storage.os, 'rename', original_rename)
+    assert llm.state['proposal'] == 1 and llm.state['execution'] == 4
+    result = optimizer.optimize(benchmark)
+    assert result.score == 1 and result.status == 'exhausted'
+    assert llm.state['proposal'] == 3 and llm.state['execution'] == 8
+    budget = json.loads(Path('results/reliable/aflow/budget.json').read_text())
+    assert budget['known_spent'] == 0
+    assert budget['reservations']['proposal_1']['reserved'] == pytest.approx(.1)
+    assert budget['reservations']['proposal_1']['status'] == 'finished'

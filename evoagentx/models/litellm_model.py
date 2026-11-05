@@ -1,17 +1,21 @@
+import asyncio
 import os
+from typing import List
+
 import litellm
+from litellm import acompletion, completion
 from tenacity import (
     retry,
     stop_after_attempt,
     wait_random_exponential,
 )
-from litellm import completion, acompletion
-from typing import List
+
 from ..core.logging import logger
 from ..core.registry import register_model
 from .model_configs import LiteLLMConfig
+from .model_utils import Cost, cost_manager, infer_litellm_company_from_model
 from .openai_model import OpenAILLM
-from .model_utils import infer_litellm_company_from_model, Cost
+
 
 @register_model(config_cls=LiteLLMConfig, alias=["litellm"])
 class LiteLLM(OpenAILLM):
@@ -157,7 +161,11 @@ class LiteLLM(OpenAILLM):
                 output = self.get_stream_output(response, output_response=output_response)
             else:
                 output: str = self.get_completion_output(response=response, output_response=output_response)
+        except asyncio.CancelledError:
+            cost_manager.record_unknown_usage(self.config.model)
+            raise
         except Exception as e:
+            cost_manager.record_unknown_usage(self.config.model)
             raise RuntimeError(f"Error during single_generate of LiteLLM: {str(e)}")
 
         return output
@@ -187,7 +195,11 @@ class LiteLLM(OpenAILLM):
                     output = self.get_stream_output(response, output_response=output_response)
             else:
                 output: str = self.get_completion_output(response=response, output_response=output_response)
+        except asyncio.CancelledError:
+            cost_manager.record_unknown_usage(self.config.model)
+            raise
         except Exception as e:
+            cost_manager.record_unknown_usage(self.config.model)
             raise RuntimeError(f"Error during single_generate_async of LiteLLM: {str(e)}")
 
         return output

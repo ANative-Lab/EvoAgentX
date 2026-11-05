@@ -166,3 +166,16 @@ The current bounded view is exported under `planner_feedback` in the experiment
 report. Each proposal intent persists the exact payload sent to that provider;
 `proposal_feedback` retains these historical snapshots even after later trials
 change the current view. Test outcomes never enter either validation payload.
+
+Native provider responses with missing usage, streams without usage, and failed
+or cancelled generation attempts emit explicit unknown accounting evidence.
+Consequently a different priced response in the same operation cannot make its
+whole usage appear known. This completeness metadata does not add invented cost
+or token counts to legacy process totals. Missing amounts retain the remaining
+pre-call bound conservatively, including across replay of a completed trial.
+
+When an operator resolves an intent whose outcome was never published, rerun
+uses the next unused attempt number and remaining attempt budget; abandon skips
+that coordinate and keeps its evidence incomplete. The original unknown amount
+remains reserved. Replaying already finalized unknown-price evidence returns its
+cached result without spending or releasing that reservation again.

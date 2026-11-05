@@ -368,6 +368,13 @@ class TrialStore:
         path = self.path / 'attempts' / f'{attempt_id}.json'
         return read_json(path) if path.exists() else None
 
+    def example_attempts(self, trial_id):
+        """Read durable example intents, including resolved calls without outcomes."""
+        self.trial(trial_id)
+        operations = [read_json(path) for path in (self.path / 'attempts').glob('*.json')]
+        return [operation for operation in operations
+                if operation['trial_id'] == trial_id and operation['stage'] == 'example']
+
     def commit_summary(self, summary):
         """Atomically publish authoritative evidence after verifying durable coverage."""
         self._require_owner()

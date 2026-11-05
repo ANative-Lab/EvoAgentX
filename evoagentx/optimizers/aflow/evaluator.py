@@ -114,8 +114,8 @@ class DetailedEvaluator:
         # A durable completed outcome establishes completion even if the process
         # died before releasing its conservative cost reservation.
         for observation in store.observations(trial_id):
-            if observation.status not in ('unknown', 'cancelled') and observation.observation_id in budget.state['reservations']:
-                budget.finish(observation.observation_id, observation.known_cost, observation.pricing == 'known')
+            if observation.status not in ('unknown', 'cancelled'):
+                budget.reconcile(observation.observation_id, observation.known_cost, observation.pricing == 'known')
         existing = store.summary(trial_id)
         if existing is not None:
             return existing
@@ -127,6 +127,15 @@ class DetailedEvaluator:
             key = (obs.example_key, obs.replicate)
             if key not in latest or obs.attempt > latest[key].attempt:
                 latest[key] = obs
+        intents = {}
+        for operation in store.example_attempts(trial_id):
+            key = (operation['example_key'], operation['replicate'])
+            if key not in intents or operation['attempt'] > intents[key]['attempt']:
+                intents[key] = operation
+            if operation.get('resolution') in ('rerun', 'abandon'):
+                # Resolution confirms termination, not actual usage. An outcome
+                # absent after a crash cannot manufacture a known zero price.
+                budget.reconcile(operation['attempt_id'], 0.0, False)
         coordinates = iter((identity, replicate) for replicate in range(plan.config.replicates)
                            for identity in plan.examples)
         stop_reason = []
@@ -136,6 +145,12 @@ class DetailedEvaluator:
                 if stop_reason:
                     return
                 previous = latest.get((identity.key, replicate))
+                intent = intents.get((identity.key, replicate))
+                if intent is not None and (previous is None or intent['attempt'] >= previous.attempt):
+                    if intent.get('resolution') == 'abandon':
+                        continue
+                    if (previous is None or intent['attempt'] > previous.attempt) and intent.get('resolution') != 'rerun':
+                        raise RuntimeError('durable example intent has no completed outcome or explicit rerun')
                 if previous is not None:
                     if previous.status == 'scored' or previous.status == 'inconclusive':
                         continue
@@ -146,6 +161,8 @@ class DetailedEvaluator:
                     start = previous.attempt + 1
                 else:
                     start = 1
+                if intent is not None:
+                    start = max(start, intent['attempt'] + 1)
                 for attempt in range(start, plan.config.attempts_per_example + 1):
                     try:
                         observation = await self._attempt(benchmark, configured, data[identity.index], identity,

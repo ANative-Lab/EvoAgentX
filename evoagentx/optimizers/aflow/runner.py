@@ -215,8 +215,7 @@ class ReliableAFlowRunner:
         if operation['status'] == 'started':
             self.store.finish_operation(operation_id, 'completed')
         costs = pending['costs']
-        if operation_id in self.budget.state['reservations']:
-            self.budget.finish(operation_id, costs['known_cost'], costs['pricing'] == 'known')
+        self.budget.reconcile(operation_id, costs['known_cost'], costs['pricing'] == 'known')
         return pending['response']
 
     async def _proposal(self):

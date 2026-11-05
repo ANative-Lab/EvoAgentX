@@ -50,6 +50,7 @@ class SiliconFlowLLM(OpenAILLM):
         # counts and leave cost at 0 (see class docstring).
         usage = getattr(response, "usage", None)
         if usage is None:
+            cost_manager.record_unknown_usage(self.config.model)
             logger.warning(
                 f"[SiliconFlowLLM] usage is None in response (id={getattr(response, 'id', '?')}); "
                 "tokens will not be recorded."

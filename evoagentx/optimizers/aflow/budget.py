@@ -92,7 +92,7 @@ class AdmissionBudget:
             self._save()
             raise RuntimeError('supported pre-call cost bound violated; admission halted')
         self.state['known_spent'] += known_cost
-        if not pricing_known:
+        if not pricing_known or not terminated:
             self.state['uncertain'] = True
         # A supplied upper bound remains reserved for unknown pricing, even if
         # execution terminated; absent observer events never prove zero dollars.
@@ -103,6 +103,17 @@ class AdmissionBudget:
         if reservation['reserved'] == 0 and terminated:
             self.state['reservations'].pop(operation_id)
         self._save()
+
+    def reconcile(self, operation_id, known_cost, pricing_known):
+        """Finalize a durable completion only while its reservation is admitted.
+
+        A finished reservation can intentionally retain unknown priced usage.
+        Its presence does not mean finalization is pending, and replay must not
+        spend it again or release its remaining conservative bound.
+        """
+        reservation = self.state['reservations'].get(operation_id)
+        if reservation is not None and reservation['status'] == 'admitted':
+            self.finish(operation_id, known_cost, pricing_known)
 
     def report(self):
         """Expose actual supported bounds and unobserved provider-internal usage."""

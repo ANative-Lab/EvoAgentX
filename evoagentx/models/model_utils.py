@@ -145,21 +145,33 @@ class CostManager:
         current_llm_cost = cost.cost
         current_total_tokens = (cost.input_tokens or 0) + (cost.output_tokens or 0)
 
+        known = getattr(cost, 'pricing_known', False) and math.isfinite(cost.cost) and cost.cost >= 0
+        self._notify_observers(CostEvent(model, cost.cost if known else None,
+                                        'known' if known else 'unknown',
+                                        cost.input_tokens or 0, cost.output_tokens or 0))
+
+        if not suppress_cost_logs.get():
+            logger.info(f"Total LLM cost: ${total_llm_cost:.3f} | Total tokens: {total_tokens} | Current LLM cost: ${current_llm_cost:.3f} | Current tokens: {current_total_tokens}")
+
+    def record_unknown_usage(self, model: str):
+        """Mark a native response/attempt whose accounting is incomplete.
+
+        Missing usage provides no numeric cost or token count to add to legacy
+        process totals. Context observers still need an explicit unknown event so
+        a different priced response cannot make the whole operation look priced.
+        """
+        self._notify_observers(CostEvent(model, None, 'unknown', 0, 0))
+
+    def _notify_observers(self, event):
+        """Deliver accounting completeness without changing provider behavior."""
         for manager, observer in _cost_observers.get():
             if manager is self:
-                known = getattr(cost, 'pricing_known', False) and math.isfinite(cost.cost) and cost.cost >= 0
-                event = CostEvent(model, cost.cost if known else None,
-                                  'known' if known else 'unknown',
-                                  cost.input_tokens or 0, cost.output_tokens or 0)
                 try:
                     observer(event)
                 except Exception:
                     # Accounting observers must not change provider behavior or
                     # prevent process-wide totals from being recorded.
                     logger.warning('Context-local cost observer failed')
-
-        if not suppress_cost_logs.get():
-            logger.info(f"Total LLM cost: ${total_llm_cost:.3f} | Total tokens: {total_tokens} | Current LLM cost: ${current_llm_cost:.3f} | Current tokens: {current_total_tokens}")
 
     def display_cost(self):
 
