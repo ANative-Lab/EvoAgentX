@@ -132,6 +132,15 @@ class TrialReporter:
         reports = [self.trial(trial['trial_id']) for trial in self.store.trials()]
         summaries = self.store.summaries()
         budget = self.store.read_state('budget', {})
+        parents = {trial['parent_id'] for trial in self.store.trials()
+                   if trial['kind'] == 'candidate' and trial['parent_id'] is not None}
+        if best is not None:
+            parents.add(best.trial_id)
+        proposal_feedback = {}
+        for path in sorted((self.store.path / 'attempts').glob('*.json')):
+            operation = read_json(path)
+            if operation['stage'] == 'proposal' and 'planner_feedback' in operation:
+                proposal_feedback[operation['attempt_id']] = operation['planner_feedback']
         return {'schema_version': SCHEMA_VERSION, 'experiment_id': self.plan.config.experiment_id,
                 'plan_id': self.plan.identity, 'split': self.plan.split,
                 'direction': self.plan.config.direction, 'margin': self.plan.config.improvement_margin,
@@ -146,6 +155,8 @@ class TrialReporter:
                 'incomplete_trials': [s.trial_id for s in summaries if not s.eligible],
                 'evolution': self.store.read_state('evolution', None),
                 'feedback': view.feedback(), 'operation_totals': self._operation_totals(),
+                'planner_feedback': {parent: view.planner_feedback(parent) for parent in sorted(parents)},
+                'proposal_feedback': proposal_feedback,
                 'operation_accounting': self.operation_accounting(),
                 'cost': {'known_spent': budget.get('known_spent', 0),
                          'uncertain': budget.get('uncertain', True),

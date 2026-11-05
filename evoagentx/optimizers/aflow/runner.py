@@ -128,7 +128,7 @@ class ReliableAFlowRunner:
         return await DetailedEvaluator(self.optimizer.executor_llm).evaluate(
             self.benchmark, graph, self.data, self.plan, trial_id, self.store, self.budget)
 
-    def _proposal_prompt(self, parent):
+    def _proposal_prompt(self, parent, feedback=None):
         """Reuse the existing AFlow proposal prompt with measured feedback."""
         graph, prompt, _ = self.store.read_artifacts(parent.trial_id)
         extracted = self.optimizer.graph_utils.extract_solve_graph(graph)
@@ -137,7 +137,7 @@ class ReliableAFlowRunner:
         descriptions = self.optimizer.graph_utils.load_operators_description(self.optimizer.operators,
                                                                             self.optimizer.optimizer_llm)
         return self.optimizer.graph_utils.create_graph_optimize_prompt(
-            self.view.prompt_feedback(parent.trial_id), parent.score, extracted[0], prompt,
+            self.view.prompt_feedback(parent.trial_id, feedback), parent.score, extracted[0], prompt,
             descriptions, self.optimizer.question_type, '')
 
     def _parse_proposal(self, content, parent):
@@ -158,9 +158,10 @@ class ReliableAFlowRunner:
         """Count proposal calls separately; an outage never restarts the baseline."""
         number = self.budget.state['counts']['proposal'] + 1
         operation_id = f'proposal_{number}'
-        prompt = self._proposal_prompt(parent)
+        feedback = self.view.planner_feedback(parent.trial_id)
+        prompt = self._proposal_prompt(parent, feedback)
         self.budget.admit('proposal', operation_id)
-        self.store.begin_operation(operation_id, 'proposal', parent.trial_id)
+        self.store.begin_operation(operation_id, 'proposal', parent.trial_id, planner_feedback=feedback)
         ledger = CostLedger()
         timeouts = [v for v in (self.config.proposal_timeout, self.budget.remaining_time()) if v is not None]
         try:

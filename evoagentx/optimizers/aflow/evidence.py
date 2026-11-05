@@ -102,18 +102,15 @@ class EvidenceView:
                              'scored': summary.scored, 'outcomes': summary.outcomes})
         return feedback
 
-    def prompt_feedback(self, parent_id):
-        """Present measured task results separately from infrastructure diagnostics."""
-        rows = [r for r in self.feedback() if r['parent_id'] == parent_id]
-        if not rows:
-            return 'No completed candidate evidence for this parent.'
-        lines = []
-        for row in rows:
-            if row['evidence'] == 'inconclusive':
-                lines.append(f"Infrastructure/incomplete evidence for {row['trial_id']}; no task-strategy conclusion.")
-            else:
-                lines.append(f"{row['evidence'].capitalize()} task evidence: {row['modification']} (score {row['after']}).")
-        return '\n'.join(lines)
+    def planner_feedback(self, parent_id):
+        """Return bounded matched diagnostics shared by planner and report consumers."""
+        from .feedback import MatchedFeedback
+        return MatchedFeedback(self.store).payload(parent_id)
+
+    def prompt_feedback(self, parent_id, payload=None):
+        """Render the exact persisted proposal evidence without task-cause claims."""
+        from .feedback import MatchedFeedback
+        return MatchedFeedback.render(self.planner_feedback(parent_id) if payload is None else payload)
 
     def converged(self):
         """Count only comparable committed trials since the last strict improvement."""

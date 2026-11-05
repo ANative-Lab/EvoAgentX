@@ -136,3 +136,33 @@ isolating sibling asyncio contexts. `asyncio.to_thread` propagates the observer;
 raw threads, external processes and providers bypassing `CostManager.update_cost`
 are unsupported accounting paths. Missing events/prices remain unobserved or
 unknown rather than known zero.
+
+## Diagnostic evidence in planning
+
+Reliable graph-proposal prompts include a bounded `validation_diagnostics` JSON
+payload. It matches committed parent/candidate validation outcomes by original ID,
+occurrence and replicate under the exact same plan. Equal means can therefore
+retain distinct observed improvements/regressions/ties. Metric direction controls
+these labels; score deltas retain their numeric sign. Missing and infrastructure
+outcomes have separate coverage categories. An incomplete trial contributes
+execution diagnostics and cannot support task-regression conclusions. Recovered
+retry failures are counted as execution diagnostics, without blaming a strategy.
+
+`feedback_max_examples` defaults to 12 across the payload, and
+`feedback_max_characters` defaults to 12000 including the JSON tags (minimum 512).
+Selection uses recent candidate trials first, then fixed plan order. The payload
+states omitted comparison/example counts; if detailed evidence cannot fit, it
+explicitly reports unavailable detail and scalar-only summaries. Oversized IDs are
+omitted as complete records rather than silently changing their identity.
+
+The payload contains IDs, observed scores, typed status categories and scoped
+recorded-attempt cost deltas. It includes no raw labels or exception tracebacks.
+Unknown pricing keeps the complete cost delta unknown; an observed known subtotal
+is identified separately. Overflowing differences receive an explicit marker and
+never produce nonfinite JSON. These are diagnostic associations, not causal or
+agent-step attribution, and do not change the committed promotion score.
+
+The current bounded view is exported under `planner_feedback` in the experiment
+report. Each proposal intent persists the exact payload sent to that provider;
+`proposal_feedback` retains these historical snapshots even after later trials
+change the current view. Test outcomes never enter either validation payload.

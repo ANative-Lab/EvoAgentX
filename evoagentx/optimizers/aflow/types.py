@@ -92,6 +92,8 @@ class ReliableTrialConfig:
     convergence_patience: int = 5
     metric_id: str | None = None
     recover_owner: bool = False
+    feedback_max_examples: int = 12
+    feedback_max_characters: int = 12000
 
     def __post_init__(self):
         """Reject ambiguous budgets before any external work can be admitted."""
@@ -102,10 +104,13 @@ class ReliableTrialConfig:
         if finite_score(self.improvement_margin) < 0:
             raise ValueError('improvement_margin must be nonnegative')
         for name in ('replicates', 'concurrency', 'attempts_per_example', 'max_example_attempts',
-                     'max_proposals', 'max_trials', 'duplicate_limit', 'convergence_patience'):
+                     'max_proposals', 'max_trials', 'duplicate_limit', 'convergence_patience',
+                     'feedback_max_examples', 'feedback_max_characters'):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                 raise ValueError(f'{name} must be a positive integer')
+        if self.feedback_max_characters < 512:
+            raise ValueError('feedback_max_characters must be at least 512 for an explicit diagnostic fallback')
         for name in ('deadline_seconds', 'attempt_timeout', 'proposal_timeout', 'max_known_cost',
                      'example_cost_bound', 'proposal_cost_bound'):
             value = getattr(self, name)

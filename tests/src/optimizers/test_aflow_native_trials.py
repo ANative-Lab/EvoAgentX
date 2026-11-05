@@ -218,3 +218,64 @@ def test_proposal_cost_evidence_survives_cleared_stage_cursor(tmp_path, monkeypa
     assert sum(row['known_cost'] for row in proposals) == pytest.approx(.04)
     assert sum(row['known_cost'] for row in operations) == pytest.approx(.12)
     assert all(row['trial_id'] and row['pricing_known'] for row in proposals)
+
+
+FEEDBACK_STATE = {}
+
+
+@register_model(LLMConfig)
+class FeedbackFixtureProvider(TrialFixtureProvider):
+    def init_model(self):
+        self.state = FEEDBACK_STATE
+    async def single_generate_async(self, messages, **kwargs):
+        prompt = messages[-1]['content']
+        cost_manager.update_cost(Cost(cost=.01), 'feedback-fixture')
+        if 'You are building a Graph' in prompt:
+            self.state['prompts'].append(prompt)
+            number = len(self.state['prompts'])
+            if number == 3:
+                # React to actual committed matched evidence, never test labels.
+                marker = '<validation_diagnostics>'
+                assert marker in prompt, 'native proposal still receives scalar-only feedback'
+                payload = json.loads(prompt.split(marker, 1)[1].split('</validation_diagnostics>', 1)[0])
+                comparison = next(row for row in payload['comparisons'] if row['trial_id'] == 'candidate_2')
+                by_id = {row['example_id']: row['change'] for row in comparison['examples']}
+                assert by_id == {'0': 'regressed', '1': 'improved'}
+                assert comparison['coverage']['recovered_retry_attempts'] == int(self.state['transient'])
+                self.state['reacted'] = True
+            graph = GRAPH.replace('prompt=problem,', f'prompt="strategy_{number}:" + problem,')
+            return f'<modification>Strategy {number}</modification><graph>{graph}</graph><prompt># local</prompt>'
+        self.state['execution'] += 1
+        if prompt.startswith('strategy_2:') and 'first' in prompt and self.state['transient'] and not self.state.get('failed_once'):
+            self.state['failed_once'] = True
+            raise TimeoutError('recovered transient execution diagnostic')
+        if prompt.startswith('strategy_3:'):
+            return 'Paris'
+        if prompt.startswith('strategy_1:') and 'first' in prompt:
+            return 'Paris'
+        if prompt.startswith('strategy_2:') and 'second' in prompt:
+            return 'Paris'
+        return 'wrong'
+
+
+@pytest.mark.parametrize('transient', [False, True])
+def test_native_next_proposal_reacts_to_equal_mean_validation_tradeoff(tmp_path, monkeypatch, transient):
+    optimizer, benchmark, _ = setup(tmp_path, monkeypatch)
+    FEEDBACK_STATE.clear()
+    FEEDBACK_STATE.update(prompts=[], execution=0, reacted=False, transient=transient)
+    llm = FeedbackFixtureProvider(LLMConfig(llm_type='FeedbackFixtureProvider', model='local-feedback-fixture'))
+    optimizer.optimizer_llm = llm
+    optimizer.executor_llm = llm
+    optimizer.max_rounds = 3
+    result = optimizer.optimize(benchmark)
+    assert result.status == 'completed' and result.score == 1 and result.best_round == 3
+    assert FEEDBACK_STATE['reacted'] and len(FEEDBACK_STATE['prompts']) == 3
+    rows = json.loads(Path('results/results.json').read_text())
+    assert [(row['round'], row['score']) for row in rows] == [(0, 0), (1, .5), (2, .5), (3, 1)]
+    marker = '<validation_diagnostics>'
+    prompt = FEEDBACK_STATE['prompts'][2]
+    payload = json.loads(prompt.split(marker, 1)[1].split('</validation_diagnostics>', 1)[0])
+    report = json.loads(Path('results/reliable/aflow/reports/experiment.json').read_text())
+    assert report['proposal_feedback']['proposal_3'] == payload
+    assert payload['comparisons'][0]['counts']['regressed'] == 2
+    assert payload['comparisons'][0]['counts']['improved'] == 2
