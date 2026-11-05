@@ -1,5 +1,9 @@
 import threading
+import math
 from collections import defaultdict
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
 from typing import Optional
 
 import pandas as pd
@@ -10,6 +14,19 @@ from ..core.callbacks import suppress_cost_logs
 from ..core.registry import MODEL_REGISTRY
 from .model_configs import LLMConfig
 from ..models.base_model import BaseLLM
+
+_cost_observers = ContextVar('aflow_cost_observers', default=())
+
+
+@dataclass(frozen=True)
+class CostEvent:
+    """Context-local accounting event; missing pricing is never a known zero."""
+
+    model: str
+    cost: Optional[float]
+    pricing: str
+    input_tokens: int
+    output_tokens: int
 
 def get_openai_model_cost() -> dict:
     import json 
@@ -51,6 +68,7 @@ class Cost:
         output_cost: Optional[float] = None,
         cost: Optional[float] = None
     ):
+        self.pricing_known = cost is not None or input_cost is not None or output_cost is not None
         self.input_tokens = input_tokens
         self.output_tokens = output_tokens
         # Keep input_cost/output_cost only as temporary constructor compatibility.
@@ -96,6 +114,22 @@ class CostManager:
 
         self.cost_per_model[model] += cost.cost
 
+    @contextmanager
+    def observe(self, observer):
+        """Observe this context's updates while retaining all process totals.
+
+        Async tasks and asyncio.to_thread inherit this context. Raw threads,
+        external processes and providers that bypass update_cost are unsupported
+        accounting paths. Observers must be fast and thread-safe. The innermost
+        scope for this manager replaces its parent observer.
+        """
+        active = tuple(pair for pair in _cost_observers.get() if pair[0] is not self)
+        token = _cost_observers.set(active + ((self, observer),))
+        try:
+            yield
+        finally:
+            _cost_observers.reset(token)
+
     @atomic_method
     def update_cost(self, cost: Cost, model: str):
         self.add_llm_cost(cost, model)
@@ -104,6 +138,19 @@ class CostManager:
         total_llm_cost = self.total_llm_cost
         current_llm_cost = cost.cost
         current_total_tokens = (cost.input_tokens or 0) + (cost.output_tokens or 0)
+
+        for manager, observer in _cost_observers.get():
+            if manager is self:
+                known = getattr(cost, 'pricing_known', False) and math.isfinite(cost.cost) and cost.cost >= 0
+                event = CostEvent(model, cost.cost if known else None,
+                                  'known' if known else 'unknown',
+                                  cost.input_tokens or 0, cost.output_tokens or 0)
+                try:
+                    observer(event)
+                except Exception:
+                    # Accounting observers must not change provider behavior or
+                    # prevent process-wide totals from being recorded.
+                    logger.warning('Context-local cost observer failed')
 
         if not suppress_cost_logs.get():
             logger.info(f"Total LLM cost: ${total_llm_cost:.3f} | Total tokens: {total_tokens} | Current LLM cost: ${current_llm_cost:.3f} | Current tokens: {current_total_tokens}")
