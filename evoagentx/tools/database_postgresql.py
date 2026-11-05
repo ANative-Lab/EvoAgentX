@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Union, Optional
 from pathlib import Path
 import psycopg2
 import psycopg2.extras
+import psycopg2.sql
 import re
 
 from .database_base import DatabaseBase, DatabaseType, QueryType, DatabaseConnection
@@ -893,7 +894,14 @@ class PostgreSQLDatabase(DatabaseBase):
                     return self.format_error_result("PostgreSQL server not available")
                 
                 with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                    cur.execute(f"SELECT COUNT(*) as row_count FROM {collection_name}")
+                    # Table names are identifiers and cannot be passed as bound
+                    # parameters; use psycopg2.sql.Identifier to quote them
+                    # safely instead of interpolating them into the SQL string.
+                    cur.execute(
+                        psycopg2.sql.SQL("SELECT COUNT(*) as row_count FROM {}").format(
+                            psycopg2.sql.Identifier(collection_name)
+                        )
+                    )
                     row_count = cur.fetchone()["row_count"]
                     cur.execute("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = %s", (collection_name,))
                     columns = cur.fetchall()
@@ -904,6 +912,13 @@ class PostgreSQLDatabase(DatabaseBase):
                 }
             return self.format_query_result(info, QueryType.SELECT)
         except Exception as e:
+            # Rollback on error so an aborted transaction does not poison
+            # subsequent queries (same convention as execute_query).
+            try:
+                if self.conn:
+                    self.conn.rollback()
+            except Exception as rollback_error:
+                logger.warning(f"Error during rollback: {str(rollback_error)}")
             return self.format_error_result(str(e))
 
     def get_schema(self, collection_name: str = None) -> Dict[str, Any]:
