@@ -1,3 +1,4 @@
+import asyncio
 import json
 from copy import deepcopy
 from typing import Dict, List, Optional, Tuple, Union
@@ -17,7 +18,6 @@ from ..utils.utils import format_tool_calls
 from .base_model import BaseLLM
 from .model_configs import OpenRouterConfig
 from .model_utils import Cost, cost_manager
-
 
 # Models already warned about paid cache writes. Process-wide so the warning
 # fires at most once per model regardless of how many LLM instances are created.
@@ -218,6 +218,7 @@ class OpenRouterLLM(BaseLLM):
         if usage_chunk is not None:
             self._update_cost(usage_chunk)
         else:
+            cost_manager.record_unknown_usage(self.config.model)
             logger.warning("[OpenRouterLLM] No usage data in stream response; cost will not be recorded.")
         return output
 
@@ -249,6 +250,7 @@ class OpenRouterLLM(BaseLLM):
         if usage_chunk is not None:
             self._update_cost(usage_chunk)
         else:
+            cost_manager.record_unknown_usage(self.config.model)
             logger.warning("[OpenRouterLLM] No usage data in stream response; cost will not be recorded.")
         return output
 
@@ -293,9 +295,11 @@ class OpenRouterLLM(BaseLLM):
     def _update_cost(self, response: Union[ChatCompletion, ChatCompletionChunk]):
         usage = response.usage
         if usage is None:
+            cost_manager.record_unknown_usage(self.config.model)
             logger.warning(f"[OpenRouterLLM] usage is None in response (id={response.id}); cost will not be recorded.")
             return
         cost_value = getattr(usage, "cost", None)
+        pricing_known = cost_value is not None
         if cost_value is None:
             logger.warning(
                 f"[OpenRouterLLM] usage.cost not present in response (id={response.id}); "
@@ -306,6 +310,7 @@ class OpenRouterLLM(BaseLLM):
             input_tokens=usage.prompt_tokens,
             output_tokens=usage.completion_tokens,
             cost=cost_value,
+            pricing_known=pricing_known,
         )
         cost_manager.update_cost(cost, model=self.config.model)
 
@@ -323,7 +328,11 @@ class OpenRouterLLM(BaseLLM):
                 output = self.get_stream_output(response, output_response=output_response)
             else:
                 output: str = self.get_completion_output(response=response, output_response=output_response)
+        except asyncio.CancelledError:
+            cost_manager.record_unknown_usage(self.config.model)
+            raise
         except Exception as e:
+            cost_manager.record_unknown_usage(self.config.model)
             raise RuntimeError(f"Error during single_generate of OpenRouterLLM: {str(e)}")
 
         return output
@@ -349,7 +358,11 @@ class OpenRouterLLM(BaseLLM):
                 # so this synchronous parsing/cost call does not block the event loop.
                 output: str = self.get_completion_output(response=response, output_response=output_response)
 
+        except asyncio.CancelledError:
+            cost_manager.record_unknown_usage(self.config.model)
+            raise
         except Exception as e:
+            cost_manager.record_unknown_usage(self.config.model)
             raise RuntimeError(f"Error during single_generate_async of OpenRouterLLM: {str(e)}")
 
         return output

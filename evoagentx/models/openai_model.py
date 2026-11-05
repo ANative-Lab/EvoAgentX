@@ -1,6 +1,9 @@
+import asyncio
 import json
 from typing import Dict, List, Optional, Union
 
+from litellm import cost_per_token
+from litellm.types.utils import Usage
 from openai import AsyncOpenAI, OpenAI, Stream
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
 from openai.types.completion_usage import CompletionUsage
@@ -9,15 +12,13 @@ from tenacity import (
     stop_after_attempt,
     wait_random_exponential,
 )
-from litellm import cost_per_token
-from litellm.types.utils import Usage
 
 from ..core.logging import logger
 from ..core.registry import register_model
 from ..prompts.tool_calling import TOOL_CALL_FORMAT
 from ..utils.utils import format_tool_calls
-from .model_configs import OpenAILLMConfig
 from .base_model import BaseLLM
+from .model_configs import OpenAILLMConfig
 from .model_utils import Cost, cost_manager, get_openai_model_cost
 
 
@@ -143,6 +144,7 @@ class OpenAILLM(BaseLLM):
         if usage_chunk is not None:
             self._update_cost(usage_chunk)
         else:
+            cost_manager.record_unknown_usage(self.config.model)
             logger.warning("[OpenAILLM] No usage data in stream response; cost will not be recorded. Set stream_options={'include_usage': True} to enable cost tracking.")
         return output
 
@@ -184,6 +186,7 @@ class OpenAILLM(BaseLLM):
         if usage_chunk is not None:
             self._update_cost(usage_chunk)
         else:
+            cost_manager.record_unknown_usage(self.config.model)
             logger.warning("[OpenAILLM] No usage data in stream response; cost will not be recorded. Set stream_options={'include_usage': True} to enable cost tracking.")
         return output
 
@@ -239,7 +242,11 @@ class OpenAILLM(BaseLLM):
                 output = self.get_stream_output(response, output_response=output_response)
             else:
                 output: str = self.get_completion_output(response=response, output_response=output_response)
+        except asyncio.CancelledError:
+            cost_manager.record_unknown_usage(self.config.model)
+            raise
         except Exception as e:
+            cost_manager.record_unknown_usage(self.config.model)
             raise RuntimeError(f"Error during single_generate of OpenAILLM: {str(e)}")
 
         return output
@@ -262,7 +269,11 @@ class OpenAILLM(BaseLLM):
                 # The network I/O is already awaited above; the response is fully in memory here,
                 # so this synchronous parsing/cost call does not block the event loop.
                 output: str = self.get_completion_output(response=response, output_response=output_response)
+        except asyncio.CancelledError:
+            cost_manager.record_unknown_usage(self.config.model)
+            raise
         except Exception as e:
+            cost_manager.record_unknown_usage(self.config.model)
             raise RuntimeError(f"Error during single_generate_async of OpenAILLM: {str(e)}")
 
         return output
@@ -283,6 +294,7 @@ class OpenAILLM(BaseLLM):
     def _update_cost(self, response: Union[ChatCompletion, ChatCompletionChunk]):
         usage = getattr(response, "usage", None)
         if usage is None:
+            cost_manager.record_unknown_usage(self.config.model)
             logger.warning(f"[OpenAILLM] usage is None in response (id={getattr(response, 'id', '?')}); cost will not be recorded.")
             return
         cost_manager.update_cost(cost=self._compute_cost(usage), model=self.config.model)

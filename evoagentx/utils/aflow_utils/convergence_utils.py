@@ -41,6 +41,8 @@ class ConvergenceUtils:
         self.data = self.load_data(root_path=self.root_path)
         rounds = {}
         for entry in self.data:
+            if entry.get("split", "validation") != "validation":
+                continue
             round_number = entry["round"]
             score = entry["score"]
             if round_number not in rounds:

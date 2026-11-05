@@ -1,18 +1,35 @@
+import math
 import threading
 from collections import defaultdict
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
 from typing import Optional
 
 import pandas as pd
 
-from ..core.logging import logger
-from ..core.decorators import atomic_method
 from ..core.callbacks import suppress_cost_logs
+from ..core.decorators import atomic_method
+from ..core.logging import logger
 from ..core.registry import MODEL_REGISTRY
-from .model_configs import LLMConfig
 from ..models.base_model import BaseLLM
+from .model_configs import LLMConfig
+
+_cost_observers = ContextVar('aflow_cost_observers', default=())
+
+
+@dataclass(frozen=True)
+class CostEvent:
+    """Context-local accounting event; missing pricing is never a known zero."""
+
+    model: str
+    cost: Optional[float]
+    pricing: str
+    input_tokens: int
+    output_tokens: int
 
 def get_openai_model_cost() -> dict:
-    import json 
+    import json
     from importlib.resources import files
     # import importlib.resources
     # with importlib.resources.open_text('litellm', 'model_prices_and_context_window_backup.json') as f:
@@ -49,12 +66,19 @@ class Cost:
         output_tokens: Optional[int] = None,
         input_cost: Optional[float] = None,
         output_cost: Optional[float] = None,
-        cost: Optional[float] = None
+        cost: Optional[float] = None,
+        pricing_known: Optional[bool] = None,
     ):
+        self._pricing_known = (cost is not None or input_cost is not None or output_cost is not None) if pricing_known is None else pricing_known
         self.input_tokens = input_tokens
         self.output_tokens = output_tokens
         # Keep input_cost/output_cost only as temporary constructor compatibility.
         self.cost = cost if cost is not None else (input_cost or 0.0) + (output_cost or 0.0)
+
+    @property
+    def pricing_known(self) -> bool:
+        """Return whether numeric cost has supported pricing rather than a fallback."""
+        return self._pricing_known
 
     @property
     def cost(self) -> float:
@@ -96,6 +120,22 @@ class CostManager:
 
         self.cost_per_model[model] += cost.cost
 
+    @contextmanager
+    def observe(self, observer):
+        """Observe this context's updates while retaining all process totals.
+
+        Async tasks and asyncio.to_thread inherit this context. Raw threads,
+        external processes and providers that bypass update_cost are unsupported
+        accounting paths. Observers must be fast and thread-safe. The innermost
+        scope for this manager replaces its parent observer.
+        """
+        active = tuple(pair for pair in _cost_observers.get() if pair[0] is not self)
+        token = _cost_observers.set(active + ((self, observer),))
+        try:
+            yield
+        finally:
+            _cost_observers.reset(token)
+
     @atomic_method
     def update_cost(self, cost: Cost, model: str):
         self.add_llm_cost(cost, model)
@@ -105,8 +145,33 @@ class CostManager:
         current_llm_cost = cost.cost
         current_total_tokens = (cost.input_tokens or 0) + (cost.output_tokens or 0)
 
+        known = getattr(cost, 'pricing_known', False) and math.isfinite(cost.cost) and cost.cost >= 0
+        self._notify_observers(CostEvent(model, cost.cost if known else None,
+                                        'known' if known else 'unknown',
+                                        cost.input_tokens or 0, cost.output_tokens or 0))
+
         if not suppress_cost_logs.get():
             logger.info(f"Total LLM cost: ${total_llm_cost:.3f} | Total tokens: {total_tokens} | Current LLM cost: ${current_llm_cost:.3f} | Current tokens: {current_total_tokens}")
+
+    def record_unknown_usage(self, model: str):
+        """Mark a native response/attempt whose accounting is incomplete.
+
+        Missing usage provides no numeric cost or token count to add to legacy
+        process totals. Context observers still need an explicit unknown event so
+        a different priced response cannot make the whole operation look priced.
+        """
+        self._notify_observers(CostEvent(model, None, 'unknown', 0, 0))
+
+    def _notify_observers(self, event):
+        """Deliver accounting completeness without changing provider behavior."""
+        for manager, observer in _cost_observers.get():
+            if manager is self:
+                try:
+                    observer(event)
+                except Exception:
+                    # Accounting observers must not change provider behavior or
+                    # prevent process-wide totals from being recorded.
+                    logger.warning('Context-local cost observer failed')
 
     def display_cost(self):
 
