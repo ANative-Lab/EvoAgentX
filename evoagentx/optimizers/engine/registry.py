@@ -151,7 +151,13 @@ class ParamRegistry:
         """Roll back a registered field to its initial value."""
         self.fields[name].reset()
 
-    def track(self, root_or_obj: Any, path_or_attr: str, *, name: str | None = None):
+    def track(
+        self,
+        root_or_obj: Any,
+        path_or_attr: str | None = None,
+        *,
+        name: str | None = None,
+    ):
         """
         Register a parameter to be optimized. Supports both nested paths and direct attributes.
 
@@ -177,7 +183,7 @@ class ParamRegistry:
         Returns:
         - self (PromptRegistry): for chaining
         """
-        if isinstance(root_or_obj, list | tuple):
+        if isinstance(root_or_obj, (list, tuple)):
             # batch mode: track([(obj, path), (obj, path, alias), ...])
             # Example:
             # registry.track([
@@ -186,11 +192,20 @@ class ParamRegistry:
             #     (program.prompt, "prefix", "prompt_prefix")
             # ])
             for item in root_or_obj:
+                if not isinstance(item, (list, tuple)) or len(item) not in (2, 3):
+                    raise ValueError(
+                        "Each batch item must be (obj, path) or (obj, path, alias)."
+                    )
                 if len(item) == 2:
                     self.track(item[0], item[1])
-                elif len(item) == 3:
+                else:
                     self.track(item[0], item[1], name=item[2])
             return self
+
+        if not isinstance(path_or_attr, str):
+            raise TypeError(
+                "path_or_attr must be a string for a single track() call."
+            )
 
         if "." in path_or_attr or "[" in path_or_attr:
             return self._track_path(root_or_obj, path_or_attr, name)
@@ -399,14 +414,29 @@ class PromptTemplateRegister(ParamRegistry):
     or prompt strings as a single optimizable object.
     """
 
-    def track(self, root_or_obj: Any, path_or_attr: str, *, name: str | None = None):
+    def track(
+        self,
+        root_or_obj: Any,
+        path_or_attr: str | None = None,
+        *,
+        name: str | None = None,
+    ):
         if isinstance(root_or_obj, (list, tuple)):
             for item in root_or_obj:
+                if not isinstance(item, (list, tuple)) or len(item) not in (2, 3):
+                    raise ValueError(
+                        "Each batch item must be (obj, path) or (obj, path, alias)."
+                    )
                 if len(item) == 2:
                     self.track(item[0], item[1])
-                elif len(item) == 3:
+                else:
                     self.track(item[0], item[1], name=item[2])
             return self
+
+        if not isinstance(path_or_attr, str):
+            raise TypeError(
+                "path_or_attr must be a string for a single track() call."
+            )
         
         if '.' in path_or_attr or '[' in path_or_attr:
             return self._track_path(root_or_obj, path_or_attr, name)
