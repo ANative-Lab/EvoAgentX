@@ -493,12 +493,15 @@ class LLMOutputParser(Parser):
         if len(attr_types) == 0:
             return {}
         
-        output_titles = [title_format.format(title=attr) for attr in attr_types.keys()]
+        output_titles = [
+            (title_format.format(title=attr), attr)
+            for attr in attr_types
+        ]
 
         def is_output_title(text: str):
-            for title in output_titles:
+            for title, attr in output_titles:
                 if text.strip().lower().startswith(title.lower()):
-                    return True, title
+                    return True, attr
             return False, None
 
         def process_lines(lines: List[str], datatype: str):
@@ -517,7 +520,7 @@ class LLMOutputParser(Parser):
         current_attr_name: str = None
         current_attr_lines: list = None
         for line in content.split("\n"):
-            is_title, title = is_output_title(line)
+            is_title, attr_name = is_output_title(line)
             if is_title:
                 if current_attr_name is not None and current_attr_lines is not None:
                     # if we already have some content for a title, and now we reach a new title
@@ -527,8 +530,7 @@ class LLMOutputParser(Parser):
 
                 # reset content for new title
                 current_attr_lines = []
-                current_attr_name = title.replace("#", "").strip()
-                output_titles.remove(title)
+                current_attr_name = attr_name
             else: 
                 if current_attr_lines is not None:
                     current_attr_lines.append(line)
