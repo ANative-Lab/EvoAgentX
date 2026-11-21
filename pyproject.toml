@@ -71,6 +71,8 @@ tools = [
     "selenium",
     "html2text",
     "fastmcp>=2.2.0,<3.0",
+    # FastMCP 2 uses MCP SDK 1.x APIs (including McpError).
+    "mcp<2",
     "cryptography<49",
     "PyPDF2",
     "Pillow",
@@ -134,6 +136,7 @@ all = [
     "selenium",
     "html2text",
     "fastmcp>=2.2.0,<3.0",
+    "mcp<2",
     "cryptography<49",
     "PyPDF2",
     "Pillow",
