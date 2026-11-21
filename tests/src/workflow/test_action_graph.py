@@ -1,5 +1,6 @@
 import unittest
 import os
+from copy import deepcopy
 from typing import Optional
 from unittest.mock import Mock, patch
 
@@ -105,6 +106,34 @@ class TestModule(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(loaded_graph.answer_generate.name, "AnswerGenerate")
         self.assertEqual(loaded_graph.answer_generate.prompt, "This is a mocked prompt")
         self.assertEqual(loaded_graph.sc_ensemble.name, "QAScEnsemble")
+
+    def test_from_dict_preserves_reusable_operator_configuration(self):
+        self.qa_action_graph.answer_generate.set_prompt("Evolved answer: {input}")
+        self.qa_action_graph.sc_ensemble.set_prompt("Evolved ensemble: {solutions}")
+        config = self.qa_action_graph.get_config()
+        original = deepcopy(config)
+
+        first = ActionGraph.from_dict(config)
+        second = ActionGraph.from_dict(config)
+
+        self.assertEqual(config, original)
+        for graph in (first, second):
+            self.assertEqual(graph.answer_generate.prompt, "Evolved answer: {input}")
+            self.assertEqual(graph.sc_ensemble.prompt, "Evolved ensemble: {solutions}")
+
+        first.answer_generate.set_prompt("A later edit: {input}")
+        self.assertEqual(config, original)
+        self.assertEqual(second.answer_generate.prompt, "Evolved answer: {input}")
+
+    def test_failed_from_dict_does_not_consume_operator_configuration(self):
+        config = self.qa_action_graph.get_config()
+        del config["llm_config"]
+        original = deepcopy(config)
+
+        with self.assertRaises(TypeError):
+            ActionGraph.from_dict(config)
+
+        self.assertEqual(config, original)
 
     def test_save_and_load(self):
         self.qa_action_graph.save_module("tests/src/workflow/saved_qa_action_graph.json")

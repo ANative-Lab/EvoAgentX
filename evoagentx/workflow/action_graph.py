@@ -71,6 +71,7 @@ class ActionGraph(BaseModule):
         """
         Create an ActionGraph from a dictionary.
         """
+        data = data.copy()
         class_name = data.get("class_name", None)
         if class_name:
             cls = MODULE_REGISTRY.get_module(class_name)
