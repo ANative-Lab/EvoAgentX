@@ -123,6 +123,35 @@ response = llm.generate(
 )
 ```
 
+### CheaperInferenceLLM
+
+CheaperInferenceLLM is an adapter for [Cheaper Inference](https://cheaperinference.com/), an OpenAI-compatible LLM gateway. One API key gives access to models from several labs.
+
+The `CheaperInferenceLLM` model class in EvoAgentX uses the same API format for all models on Cheaper Inference. You can get an API key at [cheaperinference.com/signup](https://cheaperinference.com/signup).
+
+**Basic Usage:**
+
+```python
+from evoagentx.models import CheaperInferenceConfig, CheaperInferenceLLM
+
+# Configure the model
+config = CheaperInferenceConfig(
+    model="gpt-5.4-mini",
+    cheaperinference_key="your-cheaperinference-api-key",
+    temperature=0.7,
+    max_tokens=1000
+)
+
+# Initialize the model
+llm = CheaperInferenceLLM(config=config)
+
+# Generate text
+response = llm.generate(
+    prompt="Write a poem about artificial intelligence.",
+    system_message="You are a creative poet."
+)
+```
+
 ### OpenRouterLLM
 
 OpenRouterLLM is an adapter for the [OpenRouter platform](https://openrouter.ai/), which provides access to a wide range of language models from various providers through a unified API. It supports models from providers like Anthropic, Google, Meta, Mistral AI, and more, all accessible through a single interface.

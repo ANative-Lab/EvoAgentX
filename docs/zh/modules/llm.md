@@ -122,6 +122,35 @@ response = llm.generate(
 )
 ```
 
+### CheaperInferenceLLM
+
+CheaperInferenceLLM 是 [Cheaper Inference](https://cheaperinference.com/) 的适配器。Cheaper Inference 是一个兼容 OpenAI 的 LLM 网关，使用一个 API 密钥即可访问多家实验室的模型。
+
+EvoAgentX 中的 `CheaperInferenceLLM` 模型类对 Cheaper Inference 上的所有模型使用相同的 API 格式。可以在 [cheaperinference.com/signup](https://cheaperinference.com/signup) 获取 API 密钥。
+
+**基本用法：**
+
+```python
+from evoagentx.models import CheaperInferenceConfig, CheaperInferenceLLM
+
+# Configure the model
+config = CheaperInferenceConfig(
+    model="gpt-5.4-mini",
+    cheaperinference_key="your-cheaperinference-api-key",
+    temperature=0.7,
+    max_tokens=1000
+)
+
+# Initialize the model
+llm = CheaperInferenceLLM(config=config)
+
+# Generate text
+response = llm.generate(
+    prompt="Write a poem about artificial intelligence.",
+    system_message="You are a creative poet."
+)
+```
+
 ### OpenRouterLLM
 
 OpenRouterLLM 是 [OpenRouter 平台](https://openrouter.ai/) 的适配器，该平台通过统一的 API 提供对各种提供商的语言模型的访问。它支持来自 Anthropic、Google、Meta、Mistral AI 等提供商的模型，所有这些都可以通过单一接口访问。

@@ -172,6 +172,38 @@ class NovitaConfig(LLMConfig):
         return self.model
 
 
+class CheaperInferenceConfig(LLMConfig):
+
+    # LLM keys
+    llm_type: str = "CheaperInferenceLLM"
+    cheaperinference_key: Optional[str] = Field(default=None, description="the API key used to authenticate Cheaper Inference requests")
+
+    # generation parameters
+    temperature: Optional[float] = Field(default=None, description="the temperature used to scaling logits")
+    max_tokens : Optional[int] = Field(default=None, description="maximum number of generated tokens")
+    max_completion_tokens: Optional[int] = Field(default=None, description="An upper bound for the number of tokens that can be generated for a completion, including visible output tokens and reasoning tokens. Commonly used in OpenAI's o1 series models.")
+    top_p: Optional[float] = Field(default=None, description="Only sample from tokens with cumulative probability greater than top_p when generating text.")
+    n: Optional[int] = Field(default=None, description="How many chat completion choices to generate for each input message.")
+    stream: Optional[bool] = Field(default=None, description=" If set to true, it sends partial message deltas. Tokens will be sent as they become available, with the stream terminated by a [DONE] message.")
+    stream_options: Optional[dict] = Field(default=None, description="Options for streaming response. Only set this when you set stream: true")
+    timeout: Optional[Union[float, int]] = Field(default=None, description="Timeout in seconds for completion requests (Defaults to 600 seconds)")
+
+    # tools
+    tools: Optional[List] = Field(default=None, description="A list of tools the model may call. Currently, only functions are supported as a tool. Use this to provide a list of functions the model may generate JSON inputs for.")
+    tool_choice: Optional[Union[str, dict]] = Field(default=None, description="Controls which (if any) function is called by the model. none means the model will not call a function and instead generates a message. auto means the model can pick between generating a message or calling a function. required forces the model to call a tool. Specifying a particular function via {\"type\": \"function\", \"function\": {\"name\": \"my_function\"}} forces the model to call that function.")
+    parallel_tool_calls: Optional[bool] = Field(default=None, description="Whether to enable parallel function calling during tool use. OpenAI default is true.")
+
+    # token probabilities
+    logprobs: Optional[bool] = Field(default=None, description="Whether to return log probabilities of the output tokens or not. If true, returns the log probabilities of each output token returned in the content of message.")
+    top_logprobs: Optional[int] = Field(default=None, description="An integer between 0 and 5 specifying the number of most likely tokens to return at each token position, each with an associated log probability. logprobs must be set to true if this parameter is used.")
+
+    # output format
+    response_format: Optional[Union[BaseModel, dict]] = Field(default=None, description=" An object specifying the format that the model must output.")
+
+    def __str__(self):
+        return self.model
+
+
 # def get_default_device():
 #     return "cuda" if torch.cuda.is_available() else "cpu"
 
