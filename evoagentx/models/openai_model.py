@@ -247,6 +247,7 @@ class OpenAILLM(BaseLLM):
     def batch_generate(self, batch_messages: List[List[dict]], **kwargs) -> List[str]:
         return [self.single_generate(messages=one_messages, **kwargs) for one_messages in batch_messages]
 
+    @retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(5))
     async def single_generate_async(self, messages: List[dict], **kwargs) -> str:
 
         stream = kwargs.get("stream", self.config.stream)
