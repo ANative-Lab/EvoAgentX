@@ -842,6 +842,36 @@ class SEWOptimizer(Optimizer):
         new_graph = graph_scheme.parse_from_scheme(scheme=self.repr_scheme, repr=new_graph_repr)
         return new_graph
     
+    @staticmethod
+    def _validate_refined_prompt(new_prompt: str, original_prompt: str, input_names: List[str]) -> bool:
+        """
+        Validate a refined prompt returned by the prompt breeder before adopting it.
+
+        The LLM may occasionally echo the meta-instructions used to request the
+        refinement (or drop the input placeholders), in which case adopting the
+        output verbatim silently corrupts the workflow node.
+
+        Args:
+            new_prompt (str): The refined prompt returned by the prompt breeder.
+            original_prompt (str): The current prompt of the task/operator.
+            input_names (List[str]): Names of the task inputs. Placeholders (e.g. ``{question}``)
+                that are present in ``original_prompt`` must also be present in ``new_prompt``.
+
+        Returns:
+            bool: True if the refined prompt is safe to adopt, False otherwise.
+        """
+        if not new_prompt or not new_prompt.strip():
+            return False
+        lowered = new_prompt.lower()
+        meta_markers = ("please refine the instruction", "only output the refined instruction")
+        if any(marker in lowered for marker in meta_markers):
+            return False
+        for name in input_names:
+            placeholder = "{" + name + "}"
+            if placeholder in original_prompt and placeholder not in new_prompt:
+                return False
+        return True
+
     def _wfg_prompt_optimization_step(self, graph: SequentialWorkFlowGraph) -> SequentialWorkFlowGraph:
 
         task_description = graph.goal
@@ -853,9 +883,17 @@ class SEWOptimizer(Optimizer):
             optimization_prompt = "Task Description: " + task_description + "\n\nWorkflow Steps:\n" + graph_repr + f"\n\nINSTRUCTION for the {i+1}-th task:\n\"\"\"\n" + original_prompt + "\n\"\"\""
             optimization_prompt += f"\n\nGiven the above information, please refine the instruction for the {i+1}-th task.\n"
             optimization_prompt += r"Note that you should always use bracket (e.g. `{input_name}`) to wrap the inputs of the tasks in your refined instruction.\n"
-            optimization_prompt += "Only output the refined instruction and DON'T include any other text!" 
+            optimization_prompt += "Only output the refined instruction and DON'T include any other text!"
             new_prompt = self._prompt_breeder.generate_prompt(task_description=task_description, prompt=optimization_prompt, order=self.order)
-            graph_info["tasks"][i]["prompt"] = new_prompt
+            input_names = [inp.get("name") for inp in task.get("inputs", []) if inp.get("name")]
+            if self._validate_refined_prompt(new_prompt, original_prompt, input_names):
+                graph_info["tasks"][i]["prompt"] = new_prompt
+            else:
+                logger.warning(
+                    f"Discarding invalid refined prompt for task '{task.get('name', i)}': "
+                    "the response echoes the refinement meta-instructions or drops required input placeholders. "
+                    "Keeping the original prompt."
+                )
         new_graph = SequentialWorkFlowGraph.from_dict(graph_info)
         return new_graph
         
@@ -885,7 +923,13 @@ class SEWOptimizer(Optimizer):
             optimization_prompt += "\nOnly output the refined instruction and DON'T include any other text!"
             new_prompt = self._prompt_breeder.generate_prompt(task_description=task_description, prompt=optimization_prompt, order=self.order)
             new_prompt = new_prompt.replace("\"", "").strip()
-            graph_info["operators"][operator_name]["prompt"] = new_prompt
+            if self._validate_refined_prompt(new_prompt, original_prompt, []):
+                graph_info["operators"][operator_name]["prompt"] = new_prompt
+            else:
+                logger.warning(
+                    f"Discarding invalid refined prompt for operator '{operator_name}': "
+                    "the response echoes the refinement meta-instructions. Keeping the original prompt."
+                )
         new_graph = ActionGraph.from_dict(graph_info)
         return new_graph
 
