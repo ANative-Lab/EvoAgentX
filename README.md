@@ -586,7 +586,7 @@ Thanks go to these awesome contributors
 
 We appreciate your interest in contributing to our open-source initiative. We provide a document of [contributing guidelines](https://github.com/EvoAgentX/EvoAgentX/blob/main/CONTRIBUTING.md) which outlines the steps for contributing to EvoAgentX. Please refer to this guide to ensure smooth collaboration and successful contributions. 🤝🚀
 
-[![Star History Chart](https://api.star-history.com/svg?repos=EvoAgentX/EvoAgentX&type=Date)](https://www.star-history.com/#EvoAgentX/EvoAgentX&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=EvoAgentX/EvoAgentX&type=Date)](https://star-history.dera.page/#EvoAgentX/EvoAgentX&Date)
 
 ## 📖 Citation
 

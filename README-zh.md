@@ -598,7 +598,7 @@ EvoAgentX 定期邀请顶尖研究人员开展讲座，分享 AI 领域的前沿
 
 我们感谢您对我们开源计划的贡献兴趣。我们提供了[贡献指南](https://github.com/EvoAgentX/EvoAgentX/blob/main/CONTRIBUTING.md)文档，其中概述了为EvoAgentX做贡献的步骤。请参考此指南以确保顺利协作和成功贡献。 🤝🚀
 
-[![Star历史图表](https://api.star-history.com/svg?repos=EvoAgentX/EvoAgentX&type=Date)](https://www.star-history.com/#EvoAgentX/EvoAgentX&Date)
+[![Star历史图表](https://star-history.dera.page/svg?repos=EvoAgentX/EvoAgentX&type=Date)](https://star-history.dera.page/#EvoAgentX/EvoAgentX&Date)
 
 
 ## 📖 引用
