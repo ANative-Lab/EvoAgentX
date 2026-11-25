@@ -40,6 +40,24 @@ from evoagentx.tools import (
 
 ## Toolkits and Tools
 
+### MiniMaxImageToolkit
+
+Set `MINIMAX_API_KEY` or pass `api_key` to the toolkit. Select `region="cn"`
+for a mainland China key. The default region is `"global"`.
+
+```python
+from evoagentx.tools import MiniMaxImageToolkit
+
+generate = MiniMaxImageToolkit().get_tool("minimax_image_generation")
+result = generate(prompt="A fox walking across a snowy field")
+```
+
+The default model is `MiniMax-H3-Image`. Set `model="MiniMax-H3-Image-Highspeed"`
+to use the faster variant. `n` accepts 1–10 images and `size` accepts `auto`
+or `WIDTHxHEIGHT`. Download successful URLs from `results` before they expire.
+A partially successful batch also includes indexed entries in `errors`.
+Request failures return `error`. Retrying a request can incur a second charge.
+
 ### OpenAIImageToolkit
 
 - Tools included:

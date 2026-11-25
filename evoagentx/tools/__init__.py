@@ -19,6 +19,7 @@ from .storage_handler import FileStorageHandler, LocalStorageHandler, SupabaseSt
 from .storage_file import StorageToolkit
 from .image_tools.flux_image_tools.image_generation_edit import FluxImageGenerationEditTool
 from .image_tools.flux_image_tools.toolkit import FluxImageGenerationToolkit
+from .image_tools.minimax_image_tools.toolkit import MiniMaxImageToolkit
 from .image_tools.openai_image_tools.toolkit import OpenAIImageToolkit
 from .image_tools.openrouter_image_tools.image_analysis import ImageAnalysisTool as OpenRouterImageAnalysisTool
 from .image_tools.openrouter_image_tools.image_generation import OpenRouterImageGenerationEditTool
@@ -60,6 +61,7 @@ __all__ = [
     "StorageToolkit",
     "FluxImageGenerationEditTool",
     "FluxImageGenerationToolkit",
+    "MiniMaxImageToolkit",
     "OpenAIImageToolkit",
     "OpenRouterImageAnalysisTool",
     "OpenRouterImageGenerationEditTool",
